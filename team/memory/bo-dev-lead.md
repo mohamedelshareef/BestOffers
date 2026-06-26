@@ -180,6 +180,49 @@
   GOTCHA: real-Claude clarifier (CLAUDE_PROVIDER=anthropic) loops/varies budget questions + can parse
   "٥٠٠ دينار" as fils-vs-KWD non-deterministically → use mock clarifier for the screenshot; real-Claude
   EXTRACTION (anthropic) is the verified core. RN-web Pressables don't reliably take scripted CDP clicks.
+## APIFY HANDLE SEEDING (DIRECT sellers) + HASHTAG DISCOVERY (2026-06-27 — 162/162 api, REAL-proven)
+- **Tests: 162/162 api (was 156; apify-social-provider.spec 6→13).** `apify-social-provider.ts` reworked.
+- **HANDLES.food = 39 [V] DIRECT-seller handles** (food-instagram-accounts.md "Seed list"): 16 meal-prep
+  (basickuwait, scale.kuwait, chefpaulkitchen, portionkw, themealboxkw, …caloriecontrol) FIRST, then 16
+  home-bakers (layers_kw, bakehaus.kuwait, cakentakekw, js_bakery…), 2 grills (mashawi.kw, mashawikw), 5
+  cloud/IG-led (kuwaitkitchensgroup, burgerinn.kw, bbtkw, mug.cr, collective_kw). **REMOVED the old
+  aggregator handles** (offer_food_kw, kuwait_eateries) per the DIRECT-seller rule; CONFIRM-only excluded.
+- **HANDLES.realestate = 4 [V] direct flat-listers** (real-estate-instagram-accounts.md "Seed list"):
+  majestic_kuwait, amadell_for_rent, q8_rent (furnished operators), reokuwait. Portals (q84sale/boshamlan/
+  bayut/opensooq) deliberately NOT here — they're the separate portal layer.
+- **HASHTAG DISCOVERY (opt-in, `SOCIAL_HASHTAG_DISCOVERY=on`, default off):** captures the home-kitchen/
+  من-المالك long tail that can't be hand-listed. `DISCOVERY_HASHTAGS={food:[foodkuwait,مطبخ_منزلي_الكويت],
+  realestate:[kuwaitrealestate,شقق_للايجار_الكويت]}`. **REAL FINDING (live probe 2026-06-27, durable):** the
+  post-scraper's `searchType:hashtag` + `resultsType:posts` returns only tag ENTITIES (`/explore/tags/` row,
+  no caption) on the free tier — USELESS for posts. The DEDICATED actor **`apify/instagram-hashtag-scraper`**
+  (`APIFY_IG_HASHTAG_ACTOR`, `~` in run path) with body `{hashtags:[…],resultsLimit,onlyPostsNewerThan:"30
+  days"}` DOES expand tags into real recent POSTS (caption+permalink+owner). ONE run takes the whole hashtags
+  array (1 call, 1 cap charge). Very-niche AR tags (مطبخ_منزلي_الكويت) often return `error:no_items` (IG has
+  few/none indexed — matches researcher §3) → mapRow drops them; busy tags (foodkuwait) return real posts. So
+  each vertical LEADS with a busy tag + keeps the niche AR tag (free when empty).
+- **Pipeline (apify-social-provider.ts):** `fetchPosts` = handle-mode (always) + hashtag-mode (gated) →
+  `dedupeByPermalink([...handle,...hashtag])` (EXPORTED, unit-tested) → rankByQuery. Cache keyed
+  `${vertical}:${mode}` (handle/hashtag cache independently, 6h SOCIAL_TTL_MS). Cost guards INTACT + shared:
+  ONE monthly call cap (SOCIAL_MONTHLY_RESULT_CAP=50) covers BOTH modes; perHandleLimit (APIFY_RESULTS_LIMIT,
+  ≤30); perHashtagLimit (APIFY_HASHTAG_RESULTS_LIMIT, ≤15, default 5). `runActor(actor,body,vertical)` now
+  takes the actor id so handle vs hashtag use different actors.
+- **REAL E2E PROOF (credit-bounded: APIFY_RESULTS_LIMIT=1, APIFY_HASHTAG_RESULTS_LIMIT=3):** drove the
+  COMPILED provider, SOCIAL_PROVIDER=apify + SOCIAL_HASHTAG_DISCOVERY=on, food "meal prep box" → **24 posts
+  (21 from seeded handles + 3 long-tail hashtag-only)**, deduped. Seeded: @tuningkw, @mug.cr, @bakingstudio
+  kuwait, @chefpaulkitchen, @cakentakekw, @bakehaus.kuwait — real permalinks (p/DZ1ybhBlsKK/, p/DaCtDBKimw_/).
+  Long-tail (NOT in hand list): @duaij_alkandari, @alkashkhaa.bh. Then REAL Claude (haiku) extraction on those
+  real posts: @alkashkhaa.bh caption "بـ 1.500 دينار" → `{isOffer:true,priceFils:1500}` (REAL price from a
+  hashtag-discovered post); @bakehaus.kuwait/@mug.cr no literal price → `priceFils:null` (price-on-request).
+  Truthfulness holds. **CREDIT IMPACT this verify: ~39×1 + ~2-tags×3 ≈ 45 results ≈ $0.10 of free credit.**
+- **Tests added (mock the Apify HTTP, NO real calls in suite):** handle-seeding (food targets [V] direct
+  sellers, EXCLUDES aggregators; RE seeded, EXCLUDES portals); hashtag-input mapping (off by default; on →
+  ONE instagram-hashtag-scraper run with {hashtags}, long-tail owner flows through); dedup (permalink repeat
+  across handle+hashtag → 1); monthly-cap across both modes (cap=1 → only first run executes); dedupeByPermalink.
+- **APIFY CREDIT NOTE (owner):** free-tier token. Handle run = ~39 handles × perHandleLimit posts; hashtag run
+  = 1 call for all tags × perHashtagLimit each. Behind 6h cache (user traffic never triggers) + monthly cap.
+  Hashtag discovery is OFF by default — flip SOCIAL_HASHTAG_DISCOVERY=on only when you accept the extra pulls.
+  hashtag-scraper actor must exist on the account (apify/instagram-hashtag-scraper, free to use, pay-per-result).
+
 ## REAL APIFY IG + v2 HIGH-defect fixes (2026-06-26 — 120/120 api · 22/22 mobile, REAL-proven)
 - **GOAL 1 — REAL Apify Instagram lane LIVE.** `apify-social-provider.ts` `fetchPosts` IMPLEMENTED (was
   stub). VERIFIED REAL call shape (free-tier APIFY_TOKEN in repo .env, SOCIAL_PROVIDER=apify): `POST
@@ -189,8 +232,8 @@
   `{id,shortCode,caption,hashtags,url,timestamp,displayUrl,ownerUsername}` (url=permalink, timestamp=ISO).
   `mapRow(row,vertical)` (EXPORTED, unit-tested) → RawPost; **skips `{error:'not_found'}`/error rows +
   caption-less + permalink-less rows.** Actor id `apify/instagram-scraper`→`apify~instagram-scraper`
-  (`/`→`~` in run path). Curated FOOD_HANDLES=`[offer_food_kw,basickuwait,kuwait_eateries,themealboxkw,
-  mug.cr]` ([V] from food-instagram-accounts.md); realestate handles NOT seeded yet (returns []).
+  (`/`→`~` in run path). [HANDLES SUPERSEDED 2026-06-27 — see top section: FOOD=39 [V] direct sellers
+  (aggregators removed), RE=4 [V] direct listers, + opt-in hashtag discovery.]
   COST GUARDS: in-process TTL cache per vertical (SOCIAL_TTL_MS 6h — user traffic NEVER triggers a run) +
   monthly call cap (SOCIAL_MONTHLY_RESULT_CAP, default 50; month rollover resets; cap-hit serves stale
   cache or []) + perHandleLimit (APIFY_RESULTS_LIMIT, default 10, hard-max 30). Mock stays default for
