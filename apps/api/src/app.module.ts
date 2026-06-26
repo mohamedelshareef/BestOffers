@@ -1,0 +1,31 @@
+import { Controller, Get, Module } from '@nestjs/common';
+import { SearchModule } from './search/search.module';
+import { AuthModule } from './auth/auth.module';
+import { AccountsModule } from './accounts/accounts.module';
+import { BillingModule } from './billing/billing.module';
+import { QuotaModule } from './quota/quota.module';
+
+@Controller('health')
+class HealthController {
+  @Get()
+  health() {
+    return {
+      status: 'ok',
+      service: 'bestoffers-api',
+      slice: 'S2-Phase2a accounts/billing/freemium (mock)',
+      providers: {
+        otp: process.env.OTP_PROVIDER ?? 'mock',
+        billing: process.env.BILLING_PROVIDER ?? 'mock',
+        claude: process.env.CLAUDE_PROVIDER === 'anthropic' ? 'anthropic' : 'mock',
+        liveFetch: process.env.LIVE_FETCH !== 'off' ? 'on' : 'off',
+      },
+    };
+  }
+}
+
+@Module({
+  // AuthModule is @Global → DbService/JwtService/AuthGuard injectable everywhere. Order: auth first.
+  imports: [AuthModule, AccountsModule, BillingModule, QuotaModule, SearchModule],
+  controllers: [HealthController],
+})
+export class AppModule {}

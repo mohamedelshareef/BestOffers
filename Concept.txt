@@ -1,0 +1,61 @@
+# Best Offers — Project Kickoff Package
+
+Prepared for: Mohamed El Shareef
+
+
+# 1 — Concept Summary
+
+## One-liner
+**Best Offers** is a Kuwait-localized, Arabic-first AI shopping concierge. The user states what they want in plain language; the AI narrows intent with smart follow-ups, searches the best local providers, and returns a ranked shortlist of offers — each with a price and a deep link to the provider to complete the purchase.
+
+## What it is
+- A **lightweight aggregator**. It holds no inventory, takes no payment, and runs no checkout.
+- It is a **discovery + comparison layer** that sits on top of existing Kuwait providers and hands the user off to them to buy.
+
+## Target user
+- Kuwait consumers who want the best deal without opening and comparing five different apps.
+- Bilingual audience — full Arabic and English, RTL-first.
+
+## Core value proposition
+- **Google-simple input, AI-smart output.** One box, plain language, no filters to wrestle.
+- **The AI interrogates intent before searching** — it asks the questions a good salesperson would, so results are precise, not generic.
+
+## Sectors
+- Launch sector: **Electronics** (clean, comparable catalog data — fastest path to a working product).
+- Roadmap sectors: **Food, Furniture, Cars.**
+
+## User flow
+1. **Login** — mobile number + OTP. Biometric login optional after first sign-in.
+2. **Pick a sector** — Electronics / Food / Furniture / Cars.
+3. **State intent** — e.g. "iPhone 17 Pro Max" or "grilled chicken."
+4. **AI clarifies** — follow-up questions narrow the request (storage size, color, budget / grilled or fried, sides, quantity).
+5. **AI searches** — scans the relevant Kuwait providers for matching offers.
+6. **Ranked results** — a shortlist of best offers, each with provider name, price, and a deep link.
+7. **Hand-off** — user taps a result and is taken to the provider's site/app to buy. Best Offers earns nothing from the transaction directly; revenue model below.
+
+## Key features (MVP)
+- Conversational search with clarifying questions.
+- Provider price comparison within a sector.
+- Result cards: image, one-line "why this offer," price, provider, deep link.
+- Saved searches + price-drop alerts (fast-follow, not day-one).
+- Bilingual AR/EN, RTL.
+- Mobile + light admin web (provider/source management, content moderation, analytics).
+
+## Deliberate non-goals
+- No in-app payments, cart, or checkout.
+- No inventory or fulfilment.
+- No becoming a marketplace — neutrality is the product.
+
+## Monetization options
+| Model | How it works | Trade-off |
+|---|---|---|
+| Affiliate / referral | Paid per click-through or sale sent to provider | Clean fit; depends on providers offering programs (limited in Kuwait) |
+| Sponsored placement | Providers pay to rank higher | Risks the neutrality that makes the product trusted |
+| **B2B data (strongest near-term)** | Sell anonymized demand + price-intelligence to retailers | Monetizes search data you already collect; no consumer-payment dependency |
+| Premium tier | Power features (alerts, history, multi-sector watchlists) | Small, predictable revenue; needs a base of active users first |
+
+## The one real engineering consideration
+Live offer data is easy to obtain for **individual retailers** (electronics sites with feeds/affiliate). It is harder for **closed platforms** (food-delivery apps expose vendor-side APIs, not consumer price APIs). This is why the build starts with Electronics: the data is clean and obtainable on day one, and the Food vertical is sequenced behind a provider-data plan. This is a sequencing decision, not a blocker.
+
+---
+

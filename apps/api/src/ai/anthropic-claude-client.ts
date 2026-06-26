@@ -1,0 +1,276 @@
+import { Injectable, Logger } from '@nestjs/common';
+import { IntentNormalized } from '@bestoffers/shared';
+import {
+  ClarifierInput,
+  ClarifierResult,
+  ClaudeClient,
+  RankExplanation,
+  RankInput,
+} from './claude-client.interface';
+
+/**
+ * Production Claude binding (ADR-002). Bound when CLAUDE_PROVIDER=anthropic.
+ *
+ *  - Uses the Anthropic TS SDK, imported DYNAMICALLY so the dependency is optional at test time
+ *    (the offline suite binds MockClaudeClient and never loads the SDK / needs a key).
+ *  - Opus 4.8 (claude-opus-4-8) for clarify + rank-explain; tool-use forces a STRUCTURED, parseable
+ *    JSON shape (no brittle prose parsing).
+ *  - Checks stop_reason / tool_use presence; on refusal/unavailable, raises so the orchestrator can
+ *    fall back to the data-only path (S1-4 NFR — truthfulness > availability).
+ *  - This client must NEVER return prices/providers — only an intent shape, ONE clarifier question,
+ *    and explanation TEXT grounded in a supplied attribute key (truthfulness, AC D3.3).
+ *
+ * DI NOTE: the API key is read from process.env at call time, NOT injected as a constructor param.
+ * A bare `constructor(private apiKey = process.env...)` makes Nest try to resolve a provider for the
+ * (typeless) param → "can't resolve dependencies ... argument Object at index [0]" boot crash. The
+ * provider takes zero constructor args so DI binds it cleanly via the CLAUDE_CLIENT token.
+ */
+@Injectable()
+export class AnthropicClaudeClient implements ClaudeClient {
+  private readonly logger = new Logger(AnthropicClaudeClient.name);
+  private readonly model = process.env.CLAUDE_MODEL ?? 'claude-opus-4-8';
+  private client: any;
+
+  private get apiKey(): string | undefined {
+    return process.env.ANTHROPIC_API_KEY;
+  }
+
+  private async sdk() {
+    if (!this.apiKey) {
+      throw new Error('ANTHROPIC_API_KEY missing — bind MockClaudeClient for offline/dev.');
+    }
+    if (!this.client) {
+      // dynamic import keeps @anthropic-ai/sdk out of the offline test path
+      const mod: any = await import('@anthropic-ai/sdk');
+      const Anthropic = mod.default ?? mod.Anthropic;
+      this.client = new Anthropic({ apiKey: this.apiKey });
+    }
+    return this.client;
+  }
+
+  /** Lightweight health probe — does NOT spend tokens; just confirms the SDK + key wire up. */
+  async health(): Promise<boolean> {
+    try {
+      await this.sdk();
+      return true;
+    } catch (err) {
+      this.logger.error(`health() failed: ${(err as Error).message}`);
+      return false;
+    }
+  }
+
+  // ─────────────────────────────── Step 1: clarify ───────────────────────────────
+
+  async clarify(input: ClarifierInput): Promise<ClarifierResult> {
+    const client = await this.sdk();
+
+    const system = [
+      'You are the intent + clarifier engine for "BestOffers", a Kuwaiti price-comparison app.',
+      'Users write in Kuwaiti Arabic dialect, MSA, or English. Normalize to a structured intent.',
+      'You ask AT MOST ONE clarifying question per turn, and ONLY for a dimension not already known',
+      'and not already in askedDimensions. Probe missing dimensions in this order: storage, color, budget.',
+      'If category/brand/model + enough constraints are known, set needClarification=false.',
+      'You NEVER invent prices, providers, or stock. You only normalize intent and ask one question.',
+      'Always call the `emit_clarifier` tool with the structured result. Provide Arabic (textAr) and',
+      'English (textEn) for any question, with 3 concise chips each (value + labelAr + labelEn).',
+    ].join(' ');
+
+    const tool = {
+      name: 'emit_clarifier',
+      description: 'Return the normalized intent and, if needed, ONE clarifier question.',
+      input_schema: {
+        type: 'object',
+        properties: {
+          intentNormalized: {
+            type: 'object',
+            properties: {
+              category: { type: 'string' },
+              brand: { type: 'string' },
+              model: { type: 'string' },
+              constraints: {
+                type: 'object',
+                properties: {
+                  budgetFils: { type: 'number' },
+                  storage: { type: 'string' },
+                  color: { type: 'string' },
+                },
+              },
+            },
+            required: ['constraints'],
+          },
+          needClarification: { type: 'boolean' },
+          question: {
+            type: 'object',
+            properties: {
+              dimension: { type: 'string', enum: ['storage', 'color', 'budget'] },
+              textAr: { type: 'string' },
+              textEn: { type: 'string' },
+              chips: {
+                type: 'array',
+                items: {
+                  type: 'object',
+                  properties: {
+                    value: { type: 'string' },
+                    labelAr: { type: 'string' },
+                    labelEn: { type: 'string' },
+                  },
+                  required: ['value', 'labelAr', 'labelEn'],
+                },
+              },
+            },
+            required: ['dimension', 'textAr', 'textEn', 'chips'],
+          },
+        },
+        required: ['intentNormalized', 'needClarification'],
+      },
+    };
+
+    const userMsg = JSON.stringify({
+      intentRaw: input.intentRaw,
+      sector: input.sector,
+      locale: input.locale,
+      askedDimensions: input.askedDimensions,
+    });
+
+    const res = await client.messages.create({
+      model: this.model,
+      max_tokens: 1024,
+      system,
+      tools: [tool],
+      tool_choice: { type: 'tool', name: 'emit_clarifier' },
+      messages: [{ role: 'user', content: userMsg }],
+    });
+
+    const out = this.toolInput(res, 'emit_clarifier');
+    const intentNormalized: IntentNormalized = {
+      category: out.intentNormalized?.category,
+      brand: out.intentNormalized?.brand,
+      model: out.intentNormalized?.model,
+      constraints: out.intentNormalized?.constraints ?? {},
+    };
+
+    const needClarification = !!out.needClarification && !!out.question;
+    this.logger.log(
+      `clarify: model=${this.model} need=${needClarification} ` +
+        `cat=${intentNormalized.category ?? '-'} model_field=${intentNormalized.model ?? '-'} ` +
+        `q=${out.question?.dimension ?? '-'}`,
+    );
+
+    if (!needClarification) {
+      return { intentNormalized, needClarification: false };
+    }
+    return {
+      intentNormalized,
+      needClarification: true,
+      question: {
+        dimension: out.question.dimension,
+        textAr: out.question.textAr,
+        textEn: out.question.textEn,
+        chips: out.question.chips ?? [],
+      },
+    };
+  }
+
+  // ─────────────────────────── Step 2: explain ranking ───────────────────────────
+
+  async explainRanking(input: RankInput): Promise<RankExplanation[]> {
+    const client = await this.sdk();
+
+    // Give the model ONLY the fields it may cite (no raw prices to author with — it cites the KEY,
+    // and the orchestrator re-reads the real value from data via verifyCitation).
+    const citableKeys = [
+      'price',
+      'provider',
+      'inStock',
+      'storage',
+      'color',
+      'screen',
+      'brand',
+      'model',
+      'category',
+    ];
+    const offers = input.rankedOffers.map(({ offer, sku }, rank) => ({
+      offerId: offer.id,
+      rank, // 0 = best (cheapest-first, decided by CODE)
+      provider: offer.providerName,
+      brand: sku.brand,
+      model: sku.model,
+      category: sku.category,
+      attributes: sku.attributes, // storage/color/screen…
+    }));
+
+    const system = [
+      'You write short, truthful purchase explanations for ranked offers in a Kuwaiti app.',
+      'The ranking is ALREADY DECIDED by code (rank 0 = best). You do NOT re-rank or invent prices.',
+      'For each offer write a one-line "why" in Arabic (whyAr) and English (whyEn), and set',
+      '`citedAttributeKey` to the ONE supplied attribute your explanation is grounded in.',
+      `citedAttributeKey MUST be one of: ${citableKeys.join(', ')}, and that attribute MUST be present`,
+      'for that offer. Rank 0 is the best/cheapest pick — say so. Keep each line under 12 words.',
+    ].join(' ');
+
+    const tool = {
+      name: 'emit_explanations',
+      description: 'Return one grounded explanation per offer, in the same order.',
+      input_schema: {
+        type: 'object',
+        properties: {
+          explanations: {
+            type: 'array',
+            items: {
+              type: 'object',
+              properties: {
+                offerId: { type: 'string' },
+                citedAttributeKey: { type: 'string', enum: citableKeys },
+                whyAr: { type: 'string' },
+                whyEn: { type: 'string' },
+              },
+              required: ['offerId', 'citedAttributeKey', 'whyAr', 'whyEn'],
+            },
+          },
+        },
+        required: ['explanations'],
+      },
+    };
+
+    const userMsg = JSON.stringify({
+      intentNormalized: input.intentNormalized,
+      locale: input.locale,
+      offers,
+    });
+
+    const res = await client.messages.create({
+      model: this.model,
+      max_tokens: 2048,
+      system,
+      tools: [tool],
+      tool_choice: { type: 'tool', name: 'emit_explanations' },
+      messages: [{ role: 'user', content: userMsg }],
+    });
+
+    const out = this.toolInput(res, 'emit_explanations');
+    const list: RankExplanation[] = Array.isArray(out.explanations) ? out.explanations : [];
+    this.logger.log(`explainRanking: model=${this.model} explained=${list.length}/${offers.length}`);
+    return list.map((e) => ({
+      offerId: e.offerId,
+      citedAttributeKey: e.citedAttributeKey,
+      whyAr: e.whyAr,
+      whyEn: e.whyEn,
+    }));
+  }
+
+  // ─────────────────────────────────── helpers ───────────────────────────────────
+
+  /** Pull a tool_use block's input by name; raise on refusal/missing so callers can fall back. */
+  private toolInput(res: any, toolName: string): any {
+    if (res?.stop_reason && res.stop_reason !== 'tool_use' && res.stop_reason !== 'end_turn') {
+      throw new Error(`Claude stop_reason=${res.stop_reason} — no usable tool output`);
+    }
+    const block = (res?.content ?? []).find(
+      (b: any) => b.type === 'tool_use' && b.name === toolName,
+    );
+    if (!block) {
+      throw new Error(`Claude returned no '${toolName}' tool_use block`);
+    }
+    return block.input ?? {};
+  }
+}

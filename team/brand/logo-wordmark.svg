@@ -1,0 +1,79 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 520 120" width="520" height="120" role="img" aria-label="BestOffers / أفضل العروض">
+  <title>BestOffers / أفضل العروض</title>
+  <defs>
+    <!-- Spark mark gradient: teal → deal-gold (v2 canonical palette) -->
+    <linearGradient id="sparkGrad" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#0B6B5B"/>
+      <stop offset="100%" stop-color="#C8881C"/>
+    </linearGradient>
+    <!-- Brand gradient for wordmark "Best" — matches --brand-gradient -->
+    <linearGradient id="wordGrad" x1="0%" y1="0%" x2="100%" y2="0%">
+      <stop offset="0%" stop-color="#0E8C74"/>
+      <stop offset="100%" stop-color="#075345"/>
+    </linearGradient>
+  </defs>
+
+  <!-- ═══════════════════════════════════════════
+       SPARK MARK (geometric, 48×48, sits left)
+       A four-pointed star composed of two rotated
+       rounded rectangles — evokes "best / ★" and
+       "AI spark / deal flash". Teal body, deal-gold tip.
+       v2: teal #0B6B5B → deal-gold #C8881C
+       ═══════════════════════════════════════════ -->
+  <g transform="translate(12, 36)">
+    <!-- Vertical bar of the spark -->
+    <rect x="18" y="0" width="12" height="48" rx="6" fill="url(#sparkGrad)"/>
+    <!-- Horizontal bar of the spark -->
+    <rect x="0" y="18" width="48" height="12" rx="6" fill="url(#sparkGrad)"/>
+    <!-- Centre deal-gold core — v2: #C8881C -->
+    <circle cx="24" cy="24" r="6" fill="#C8881C"/>
+  </g>
+
+  <!-- ═══════════════════════════════════════════
+       ENGLISH WORDMARK — "BestOffers"
+       v2: Rubik display font, "Best" in brand
+       primary #0B6B5B, "Offers" in text primary
+       #18211F. Replaces Inter from v1.
+       ═══════════════════════════════════════════ -->
+  <text
+    x="76"
+    y="54"
+    font-family="'Rubik', 'IBM Plex Sans Arabic', system-ui, sans-serif"
+    font-size="36"
+    font-weight="700"
+    letter-spacing="-0.5"
+    fill="#0B6B5B"
+  >Best</text>
+  <text
+    x="172"
+    y="54"
+    font-family="'Rubik', 'IBM Plex Sans Arabic', system-ui, sans-serif"
+    font-size="36"
+    font-weight="700"
+    letter-spacing="-0.5"
+    fill="#18211F"
+  >Offers</text>
+
+  <!-- Deal-gold underline accent under "Best" — v2: #C8881C (was #F5A623) -->
+  <rect x="76" y="60" width="88" height="4" rx="2" fill="#C8881C"/>
+
+  <!-- ═══════════════════════════════════════════
+       ARABIC WORDMARK — "أفضل العروض"
+       RTL text, placed below, IBM Plex Sans Arabic.
+       v2: text-secondary #5C6864 (was #5B6670).
+       ═══════════════════════════════════════════ -->
+  <text
+    x="444"
+    y="96"
+    text-anchor="end"
+    font-family="'IBM Plex Sans Arabic', 'Rubik', system-ui, sans-serif"
+    font-size="22"
+    font-weight="600"
+    direction="rtl"
+    unicode-bidi="embed"
+    fill="#5C6864"
+  >أفضل العروض</text>
+
+  <!-- Warm hairline separator between EN + AR stacks — v2: #E6DFD4 (was #E1E4E8) -->
+  <line x1="76" y1="72" x2="440" y2="72" stroke="#E6DFD4" stroke-width="1"/>
+</svg>

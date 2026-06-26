@@ -1,0 +1,26 @@
+{
+  "expo": {
+    "name": "BestOffers",
+    "slug": "bestoffers",
+    "scheme": "bestoffers",
+    "version": "0.1.0",
+    "orientation": "portrait",
+    "ios": {
+      "bundleIdentifier": "com.bestoffers.mobile",
+      "supportsTablet": false
+    },
+    "android": {
+      "package": "com.bestoffers.mobile"
+    },
+    "newArchEnabled": true,
+    "extra": {
+      "apiBaseUrl": "http://localhost:3000"
+    },
+    "plugins": ["expo-router"],
+    "experiments": {
+      "typedRoutes": false
+    },
+    "locales": {},
+    "_comment": "RTL: I18nManager.forceRTL(true) for Arabic; force-RTL restart UX per flows-and-ia §6 (dev to confirm)."
+  }
+}

@@ -1,0 +1,222 @@
+/* ============================================================================
+   BestOffers — Refreshed Design System (v2)  ·  bo-ux-lead
+   Arabic-first / RTL-default · AI shopping concierge (Kuwait) · WCAG AA
+   This file is the single source of truth for the v2 visual tokens used by
+   every mockup in this folder. Devs map these to RN theme tokens (see README).
+   ----------------------------------------------------------------------------
+   AESTHETIC THESIS (frontend-design skill):
+   Subject = the Gulf souk moment of "finding the best price you can trust".
+   - Canvas: warm Gulf "sand" (not stark white, not the AI-cream-serif cliché).
+   - Brand: deep evergreen→teal = trust, calm, "the verified good deal".
+   - Value accent: a single reserved "deal gold" — appears ONLY on price/best.
+   - Signature: the BEST-PRICE VERDICT — a confident gradient ribbon + check
+     that crowns the top-ranked result. Boldness spent in exactly one place.
+   ============================================================================ */
+
+@import url('https://fonts.googleapis.com/css2?family=Rubik:wght@400;500;600;700;800&family=IBM+Plex+Sans+Arabic:wght@400;500;600;700&display=swap');
+
+:root {
+  /* ---- Color · brand ---------------------------------------------------- */
+  --brand-primary:        #0B6B5B;  /* deep teal-evergreen — trust / good deal */
+  --brand-primary-strong: #075345;  /* pressed / gradient deep stop            */
+  --brand-primary-soft:   #E3F2EE;  /* tinted surfaces, selected chips         */
+  --brand-gradient:       linear-gradient(135deg, #0E8C74 0%, #075345 100%);
+
+  /* ---- Color · value accent (reserved for price/best ONLY) -------------- */
+  --accent-gold:          #C8881C;  /* deal-gold, AA on light surfaces         */
+  --accent-gold-strong:   #A86E0E;
+  --accent-gold-soft:     #FBF0D9;  /* gold-tinted verdict ribbon fill         */
+  --accent-gradient:      linear-gradient(135deg, #E0A93B 0%, #C8881C 100%);
+
+  /* ---- Color · canvas & surfaces ---------------------------------------- */
+  --bg-canvas:      #FBF8F3;  /* warm Gulf "sand" — the premium signature base */
+  --bg-surface:     #FFFFFF;  /* cards, inputs                                  */
+  --bg-surface-alt: #F1ECE3;  /* skeletons, dividers fill, recessed wells       */
+  --bg-elevated:    #FFFFFF;
+
+  /* ---- Color · text ----------------------------------------------------- */
+  --text-primary:   #18211F;  /* near-black with a green undertone             */
+  --text-secondary: #5C6864;  /* captions, provider, helper (AA on canvas)     */
+  --text-on-brand:  #FFFFFF;
+  --text-on-gold:   #2A1D03;
+
+  /* ---- Color · borders & state ------------------------------------------ */
+  --border-default: #E6DFD4;  /* warm hairline, harmonizes with sand           */
+  --border-strong:  #D6CDBE;
+  --state-success:  #1E9E6A;
+  --state-error:    #C8442F;
+  --state-warning:  #B5780A;
+  --overlay-scrim:  rgba(20, 28, 26, 0.55);
+
+  /* ---- Elevation (soft, warm-tinted — never heavy material) ------------- */
+  --shadow-sm: 0 1px 2px rgba(24,33,31,0.05);
+  --shadow-card: 0 2px 10px rgba(24,33,31,0.06), 0 1px 2px rgba(24,33,31,0.04);
+  --shadow-lift: 0 8px 28px rgba(7,83,69,0.14);   /* hero / verdict / paywall  */
+  --shadow-pill: 0 1px 0 rgba(24,33,31,0.04);
+
+  /* ---- Typography ------------------------------------------------------- */
+  --font-display: 'Rubik', 'IBM Plex Sans Arabic', system-ui, sans-serif;
+  --font-body:    'IBM Plex Sans Arabic', 'Rubik', system-ui, sans-serif;
+
+  --display-size: 28px; --display-lh: 38px; --display-w: 800;
+  --h1-size: 22px; --h1-lh: 32px; --h1-w: 700;
+  --h2-size: 18px; --h2-lh: 28px; --h2-w: 600;
+  --body-size: 16px; --body-lh: 27px; --body-w: 400;   /* +1 line-height for AR */
+  --price-size: 22px; --price-lh: 28px; --price-w: 800;
+  --caption-size: 13px; --caption-lh: 20px; --caption-w: 400;
+  --button-size: 16px; --button-w: 600;
+  --eyebrow-size: 12px; --eyebrow-ls: 0.04em;   /* Latin only; never on Arabic  */
+
+  /* ---- Spacing (4px base) ----------------------------------------------- */
+  --sp-xs: 4px; --sp-sm: 8px; --sp-md: 12px; --sp-lg: 16px;
+  --sp-xl: 24px; --sp-2xl: 32px; --sp-3xl: 48px;
+
+  /* ---- Radius ----------------------------------------------------------- */
+  --r-card: 16px;     /* up from 12 — softer, more premium                    */
+  --r-input: 14px;
+  --r-chip: 999px;    /* full pill chips — friendlier, more "concierge"       */
+  --r-button: 14px;
+  --r-pill: 999px;
+  --r-sheet: 24px;    /* paywall / sheets top corners                         */
+
+  /* ---- Motion ----------------------------------------------------------- */
+  --ease: cubic-bezier(0.22, 0.61, 0.36, 1);
+  --dur: 220ms;
+}
+
+/* ============================ Base / phone frame ========================== */
+* { box-sizing: border-box; margin: 0; padding: 0; }
+
+body {
+  background: #ECE7DD;
+  font-family: var(--font-body);
+  color: var(--text-primary);
+  -webkit-font-smoothing: antialiased;
+  display: flex; flex-wrap: wrap; gap: 40px;
+  justify-content: center; align-items: flex-start;
+  padding: 48px 24px;
+}
+
+/* Phone device shell (390×844 ~ iPhone logical) */
+.phone {
+  width: 390px; min-height: 844px;
+  background: var(--bg-canvas);
+  border-radius: 44px;
+  box-shadow: 0 24px 60px rgba(24,33,31,0.22), 0 0 0 10px #11201D, 0 0 0 12px #2B3A36;
+  overflow: hidden;
+  position: relative;
+  direction: rtl;                 /* RTL-DEFAULT — Arabic-first              */
+}
+.phone__notch {
+  position: absolute; top: 12px; left: 50%; transform: translateX(-50%);
+  width: 124px; height: 30px; background: #11201D; border-radius: 16px; z-index: 50;
+}
+.statusbar {
+  height: 52px; display: flex; align-items: flex-end; justify-content: space-between;
+  padding: 0 26px 6px; font: 600 13px var(--font-display);
+  color: var(--text-primary); position: relative; z-index: 40;
+}
+.statusbar .right { display: flex; gap: 6px; align-items: center; }
+
+/* The screen body scroll area */
+.screen { padding: 0 var(--sp-lg) calc(var(--sp-3xl) + 12px); position: relative; }
+
+/* ============================ Reusable components ========================= */
+
+/* Eyebrow (Latin labels only) */
+.eyebrow {
+  font: 700 var(--eyebrow-size)/1 var(--font-display);
+  letter-spacing: var(--eyebrow-ls); text-transform: uppercase;
+  color: var(--brand-primary);
+}
+
+/* Header */
+.appbar {
+  display: flex; align-items: center; gap: var(--sp-md);
+  padding: var(--sp-sm) 0 var(--sp-lg);
+}
+.appbar h1 { font: var(--h1-w) var(--h1-size)/var(--h1-lh) var(--font-display); }
+.icon-btn {
+  width: 44px; height: 44px; border-radius: 999px; border: none;
+  background: var(--bg-surface); box-shadow: var(--shadow-card);
+  display: grid; place-items: center; color: var(--text-primary); cursor: pointer;
+}
+
+/* Avatar */
+.avatar { border-radius: 999px; object-fit: cover; display: grid; place-items: center;
+  background: var(--brand-gradient); color: var(--text-on-brand);
+  font: 700 1em var(--font-display); overflow: hidden; }
+.avatar--sm { width: 40px; height: 40px; font-size: 15px; }
+.avatar--lg { width: 96px; height: 96px; font-size: 34px; box-shadow: var(--shadow-lift); }
+
+/* Buttons */
+.btn {
+  height: 54px; border: none; border-radius: var(--r-button); width: 100%;
+  font: var(--button-w) var(--button-size)/1 var(--font-display); cursor: pointer;
+  display: inline-flex; align-items: center; justify-content: center; gap: var(--sp-sm);
+  transition: transform var(--dur) var(--ease);
+}
+.btn:active { transform: scale(0.985); }
+.btn--primary { background: var(--brand-gradient); color: var(--text-on-brand);
+  box-shadow: var(--shadow-lift); }
+.btn--gold { background: var(--accent-gradient); color: var(--text-on-gold);
+  box-shadow: 0 8px 24px rgba(200,136,28,0.30); }
+.btn--secondary { background: var(--bg-surface); color: var(--brand-primary);
+  border: 1.5px solid var(--brand-primary); box-shadow: none; }
+.btn--ghost { background: transparent; color: var(--brand-primary); height: 44px; }
+
+/* Chips */
+.chip {
+  height: 40px; padding: 0 var(--sp-lg); border-radius: var(--r-chip);
+  background: var(--bg-surface); border: 1.5px solid var(--border-default);
+  font: 500 15px/1 var(--font-body); color: var(--text-primary); cursor: pointer;
+  display: inline-flex; align-items: center; gap: 6px; white-space: nowrap;
+}
+.chip--selected { background: var(--brand-primary); border-color: var(--brand-primary);
+  color: var(--text-on-brand); }
+.chip--skip { background: transparent; color: var(--text-secondary);
+  border-style: dashed; }
+
+/* Quota pill */
+.quota {
+  height: 30px; padding: 0 12px; border-radius: var(--r-pill);
+  background: var(--bg-surface); border: 1px solid var(--border-default);
+  font: 600 12.5px/1 var(--font-body); color: var(--text-secondary);
+  display: inline-flex; align-items: center; gap: 6px; box-shadow: var(--shadow-pill);
+}
+.quota--warn { color: var(--state-warning); border-color: #EBD7AE; background: var(--accent-gold-soft); }
+.quota--gate { color: var(--text-on-brand); background: var(--brand-primary);
+  border-color: var(--brand-primary); cursor: pointer; }
+
+/* Tags / badges */
+.tag {
+  height: 24px; padding: 0 10px; border-radius: 999px; font: 600 11.5px/1 var(--font-body);
+  display: inline-flex; align-items: center; gap: 4px;
+}
+.tag--soon { background: var(--bg-surface-alt); color: var(--text-secondary); }
+.tag--pro { background: var(--brand-primary-soft); color: var(--brand-primary); }
+.tag--save { background: var(--accent-gold-soft); color: var(--accent-gold-strong); }
+
+/* Cards */
+.card {
+  background: var(--bg-surface); border: 1px solid var(--border-default);
+  border-radius: var(--r-card); box-shadow: var(--shadow-card);
+}
+
+/* ============================================================================
+   NUMERAL RULE (LOCKED · 2026-06-26 · resolves open question S0-3)
+   ----------------------------------------------------------------------------
+   ALL numerals in the app are WESTERN / Latin digits 0-9 — never Arabic-Indic
+   (٠١٢٣٤٥٦٧٨٩). This applies EVERYWHERE: prices, quantities, counts, OTP,
+   quota/searches-remaining, ranks, timers, phone numbers, dates.
+   Rationale: matches how prices appear on Kuwaiti provider feeds; avoids
+   digit-shaping/bidi bugs; one consistent rule for devs.
+   - Currency LABEL stays bilingual: "KWD" (EN) / "د.ك" (AR). Only the DIGITS
+     are Western. e.g.  412.000 د.ك  /  412.000 KWD.
+   - In React Native: do NOT enable Arabic-Indic digit shaping; keep the JS
+     i18n number formatter on 'en' digit set even when the UI locale is 'ar'
+     (e.g. Intl.NumberFormat('ar-KW-u-nu-latn', …) — note the -nu-latn).
+   - Always wrap a numeric run in .num so it stays LTR inside RTL text.
+   ============================================================================ */
+/* Number digits stay LTR even inside RTL */
+.num { direction: ltr; unicode-bidi: isolate; display: inline-block; }

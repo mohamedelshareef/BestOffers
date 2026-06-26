@@ -1,0 +1,127 @@
+BestOffers — Sprint 2.5 demo: full intent -> clarifier -> results API transcript
+Generated: 2026-06-25T23:36:46Z  |  API :3000 (claude=mock)  |  Expo Web :8081
+============================================================================
+
+## 1. Health
+{"status":"ok","service":"bestoffers-api","slice":"S2-3 walking skeleton"}
+
+## 2. POST /search/intent  (locale=ar, intent: ايفون 17 برو ماكس)
+{
+  "searchSessionId": "f27626e8-1062-4aef-a65c-37c6dee6c522",
+  "state": "clarifying",
+  "questions": [
+    {
+      "dimension": "storage",
+      "textAr": "ما السعة التخزينية التي تريدها؟",
+      "textEn": "Which storage size do you want?",
+      "chips": [
+        {
+          "value": "128GB",
+          "labelAr": "128 جيجا",
+          "labelEn": "128GB"
+        },
+        {
+          "value": "256GB",
+          "labelAr": "256 جيجا",
+          "labelEn": "256GB"
+        },
+        {
+          "value": "512GB",
+          "labelAr": "512 جيجا",
+          "labelEn": "512GB"
+        }
+      ]
+    }
+  ],
+  "clarifierCount": 1
+}
+
+session: f27626e8-1062-4aef-a65c-37c6dee6c522
+
+## 3. POST /search/answer  dimension=storage answer=256GB  (Q2 expected)
+state: clarifying | clarifierCount: 2 | nextQ: color
+
+## 4. POST /search/answer  dimension=color answer=black  (Q3 expected)
+state: clarifying | clarifierCount: 3 | nextQ: budget
+
+## 5. POST /search/answer  dimension=budget answer=500  -> RESULTS (bound=3 reached)
+{
+  "searchSessionId": "f27626e8-1062-4aef-a65c-37c6dee6c522",
+  "state": "results",
+  "cards": [
+    {
+      "skuId": "sku_ip17pm_256_black",
+      "offerId": "off_eureka_ip17pm_256_black",
+      "productName": "Apple iPhone 17 Pro Max 256GB Black Titanium",
+      "providerId": "prov_eureka",
+      "providerName": "Eureka",
+      "priceFils": 419500,
+      "priceLabel": "419.500 KWD",
+      "whyAr": "أفضل سعر — الأرخص",
+      "whyEn": "Cheapest match — lowest price",
+      "whyCitedAttribute": {
+        "key": "price",
+        "value": "419500"
+      },
+      "deeplinkUrl": "https://www.eureka.com.kw/p/ip17pm_256_black",
+      "imageUrl": "https://cdn.bestoffers.kw/skus/ip17pm-black.png",
+      "source": "cache"
+    },
+    {
+      "skuId": "sku_ip17pm_256_black",
+      "offerId": "off_xcite_ip17pm_256_black",
+      "productName": "Apple iPhone 17 Pro Max 256GB Black Titanium",
+      "providerId": "prov_xcite",
+      "providerName": "X-cite",
+      "priceFils": 425000,
+      "priceLabel": "425.000 KWD",
+      "whyAr": "مطابقة قوية — سعة 256GB",
+      "whyEn": "Strong match — storage 256GB",
+      "whyCitedAttribute": {
+        "key": "storage",
+        "value": "256GB"
+      },
+      "deeplinkUrl": "https://www.xcite.com/p/ip17pm_256_black",
+      "imageUrl": "https://cdn.bestoffers.kw/skus/ip17pm-black.png",
+      "source": "live"
+    },
+    {
+      "skuId": "sku_ip17pm_256_black",
+      "offerId": "off_alyousifi_ip17pm_256_black",
+      "productName": "Apple iPhone 17 Pro Max 256GB Black Titanium",
+      "providerId": "prov_alyousifi",
+      "providerName": "Best Al-Yousifi",
+      "priceFils": 429000,
+      "priceLabel": "429.000 KWD",
+      "whyAr": "مطابقة قوية — سعة 256GB",
+      "whyEn": "Strong match — storage 256GB",
+      "whyCitedAttribute": {
+        "key": "storage",
+        "value": "256GB"
+      },
+      "deeplinkUrl": "https://www.best.com.kw/p/ip17pm_256_black",
+      "imageUrl": "https://cdn.bestoffers.kw/skus/ip17pm-black.png",
+      "source": "live"
+    },
+    {
+      "skuId": "sku_ip17pm_256_black",
+      "offerId": "off_blink_ip17pm_256_black",
+      "productName": "Apple iPhone 17 Pro Max 256GB Black Titanium",
+      "providerId": "prov_blink",
+      "providerName": "Blink",
+      "priceFils": 432000,
+      "priceLabel": "432.000 KWD",
+      "whyAr": "مطابقة قوية — سعة 256GB",
+      "whyEn": "Strong match — storage 256GB",
+      "whyCitedAttribute": {
+        "key": "storage",
+        "value": "256GB"
+      },
+      "deeplinkUrl": "https://www.blink.com.kw/p/ip17pm_256_black",
+      "imageUrl": "https://cdn.bestoffers.kw/skus/ip17pm-black.png",
+      "source": "cache"
+    }
+  ],
+  "clarifierCount": 3,
+  "assumptions": []
+}

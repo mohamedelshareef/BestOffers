@@ -1,0 +1,11 @@
+Served Expo-Web JS bundle string presence — proves the running web app on :8081 is OUR code.
+Source: GET /node_modules/expo-router/entry.bundle?platform=web (HTTP 200, ~3.8 MB)
+
+  [x] شنو تدوّر؟  (intent title, AR)
+  [x] What are you looking for?  (intent title, EN)
+  [x] أفضل العروض  (app/results title, AR)
+  [x] إلكترونيات  (sector label, AR)
+  [x] ابحث  (search CTA, AR)
+  [x] Searching providers…  (W8 searching, EN)
+  [x] اذهب للمتجر  (deep-link CTA, AR)
+  [x] بحث جديد  (new search, AR)

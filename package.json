@@ -1,0 +1,28 @@
+{
+  "name": "bestoffers",
+  "version": "0.1.0",
+  "private": true,
+  "description": "BestOffers — Kuwait-localized, Arabic-first AI shopping concierge. Monorepo per ADR-001.",
+  "workspaces": [
+    "packages/*",
+    "apps/*"
+  ],
+  "scripts": {
+    "build:types": "npm run build --workspace @bestoffers/shared",
+    "test": "npm run build:types && npm run test --workspace @bestoffers/api",
+    "test:api": "npm run test --workspace @bestoffers/api",
+    "dev:api": "npm run start:dev --workspace @bestoffers/api",
+    "migrate": "npm run migrate --workspace @bestoffers/api",
+    "seed": "npm run seed --workspace @bestoffers/api",
+    "live:offers": "npm run live:offers --workspace @bestoffers/api",
+    "demo": "node scripts/demo.mjs",
+    "demo:export": "npm run migrate && npm run seed && npm run export:web --workspace @bestoffers/mobile",
+    "export:web": "npm run export:web --workspace @bestoffers/mobile"
+  },
+  "engines": {
+    "node": ">=20"
+  },
+  "devDependencies": {
+    "concurrently": "^9.2.3"
+  }
+}

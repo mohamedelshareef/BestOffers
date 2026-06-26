@@ -1,0 +1,522 @@
+<!DOCTYPE html>
+<html lang="ar" dir="rtl">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>BestOffers — Visual Design v2 (Arabic-first / RTL)</title>
+<link rel="stylesheet" href="tokens.css" />
+<style>
+  /* Page-level scaffolding for the mockup gallery (not part of the app DS) */
+  .gallery-title {
+    width: 100%; text-align: center; margin-bottom: 8px;
+    font: 800 30px var(--font-display); color: #11201D; direction: rtl;
+  }
+  .gallery-sub {
+    width: 100%; text-align: center; margin: -2px 0 28px;
+    font: 500 15px var(--font-body); color: #5C6864; direction: rtl;
+  }
+  .screen-label {
+    width: 390px; text-align: center; margin: 14px 0 -22px;
+    font: 700 13px var(--font-display); letter-spacing: .03em;
+    text-transform: uppercase; color: #5C6864; order: 2;
+  }
+  .stack { display: flex; flex-direction: column; align-items: center; }
+
+  /* --- shared screen pieces --- */
+  .hero-greeting { margin-top: 4px; }
+  .hero-greeting .eyebrow { display:block; margin-bottom: 6px; }
+  .hero-greeting h1 { font: 800 26px/34px var(--font-display); }
+  .hero-greeting p { color: var(--text-secondary); margin-top: 4px; font-size: 14.5px; }
+
+  .searchbox {
+    margin-top: var(--sp-lg); background: var(--bg-surface);
+    border: 1.5px solid var(--border-default); border-radius: 20px;
+    box-shadow: var(--shadow-card); padding: 16px 16px 14px;
+  }
+  .searchbox__row { display: flex; align-items: flex-start; gap: 10px; }
+  .searchbox__row svg { flex: none; margin-top: 2px; color: var(--brand-primary); }
+  .searchbox__input { flex: 1; border: none; outline: none; background: transparent;
+    font: 400 17px/26px var(--font-body); color: var(--text-primary); resize: none; }
+  .searchbox__input::placeholder { color: #9AA39F; }
+  .searchbox__hint { color: var(--text-secondary); font-size: 12.5px; margin-top: 10px;
+    padding-top: 10px; border-top: 1px dashed var(--border-default); }
+  .mic { width: 36px; height: 36px; border-radius: 999px; background: var(--brand-primary-soft);
+    color: var(--brand-primary); border: none; display:grid; place-items:center; }
+
+  .suggest-title { margin: var(--sp-xl) 0 var(--sp-md); font: 700 13px var(--font-display);
+    letter-spacing:.03em; color: var(--text-secondary); }
+  .suggest-row { display:flex; align-items:center; gap: 12px; padding: 12px 4px;
+    border-bottom: 1px solid var(--border-default); }
+  .suggest-row .ico { width:38px;height:38px;border-radius:12px;background:var(--bg-surface-alt);
+    display:grid;place-items:center;color:var(--text-secondary);flex:none; }
+  .suggest-row .txt { flex:1; font: 500 15px var(--font-body); }
+  .suggest-row .arr { color:#B7B0A4; }
+
+  /* --- Category select (screen 0 — the new first screen) --- */
+  .cat-hero { padding: 8px 0 4px; }
+  .cat-hero .eyebrow { display:block; margin-bottom: 8px; }
+  .cat-hero h1 { font: 800 26px/34px var(--font-display); }
+  .cat-hero p { color: var(--text-secondary); margin-top: 6px; font-size: 14.5px; line-height: 22px; }
+  .cat-grid { display:grid; grid-template-columns:1fr 1fr; gap:14px; margin-top: var(--sp-xl); }
+  .cat-tile {
+    border-radius: var(--r-card); padding: 18px; min-height: 150px;
+    display:flex; flex-direction:column; justify-content:space-between;
+    position:relative; cursor:pointer; text-align:start;
+    transition: transform var(--dur) var(--ease);
+  }
+  .cat-tile:active { transform: scale(0.985); }
+  .cat-tile--active { background: var(--bg-surface); border:1px solid var(--border-default);
+    color: var(--text-primary); box-shadow: var(--shadow-card); }
+  .cat-tile--soon { background: var(--bg-surface-alt); border:1px dashed var(--border-strong);
+    color: var(--text-secondary); cursor: not-allowed; }
+  .cat-tile .ic { width:52px;height:52px;border-radius:16px;display:grid;place-items:center; flex:none; }
+  .cat-tile--active .ic { background: var(--brand-primary-soft); color: var(--brand-primary); }
+  .cat-tile--soon .ic { background:#E7E1D6; color:#A79F90; }
+  .cat-tile__labels h3 { font: 700 18px var(--font-display); }
+  .cat-tile__labels .en { font: 700 11.5px/1 var(--font-display); letter-spacing:.05em;
+    text-transform:uppercase; color: var(--text-secondary); margin-top: 4px; display:block; }
+  .cat-tile--active .cat-tile__labels .en { color: var(--brand-primary); }
+  .cat-tile__go { position:absolute; top:16px; left:16px; color: var(--brand-primary); }
+  .cat-tile--soon .tag--soon { position:absolute; top:16px; left:16px; }
+  .cat-note { display:flex; align-items:center; gap:9px; margin-top: var(--sp-xl);
+    padding: 12px 14px; border-radius: 14px; background: var(--brand-primary-soft);
+    color: var(--brand-primary); font: 500 13px/19px var(--font-body); }
+
+  .sectors { display:grid; grid-template-columns:1fr 1fr; gap:12px; margin-top: var(--sp-xl); }
+  .sector { border-radius: var(--r-card); padding: 18px; min-height: 132px;
+    display:flex; flex-direction:column; justify-content:space-between; position:relative; }
+  .sector--active { background: var(--brand-gradient); color: var(--text-on-brand);
+    box-shadow: var(--shadow-lift); }
+  .sector--soon { background: var(--bg-surface); border:1px solid var(--border-default);
+    color: var(--text-secondary); }
+  .sector .ic { width:46px;height:46px;border-radius:14px;display:grid;place-items:center; }
+  .sector--active .ic { background: rgba(255,255,255,0.18); }
+  .sector--soon .ic { background: var(--bg-surface-alt); }
+  .sector h3 { font: 700 17px var(--font-display); }
+  .sector--soon .tag--soon { position:absolute; top:14px; left:14px; }
+
+  /* --- Clarifier --- */
+  .chat { display:flex; flex-direction:column; gap: 14px; margin-top: var(--sp-lg); }
+  .bubble { max-width: 80%; padding: 12px 15px; font: 400 15.5px/24px var(--font-body); }
+  .bubble--ai { align-self:flex-start; background: var(--bg-surface);
+    border:1px solid var(--border-default); border-radius: 18px 18px 18px 5px;
+    box-shadow: var(--shadow-sm); }
+  .bubble--user { align-self:flex-end; background: var(--brand-primary);
+    color: var(--text-on-brand); border-radius: 18px 18px 5px 18px; }
+  .chips-row { display:flex; flex-wrap:wrap; gap:8px; margin-top: 2px; align-self:flex-start; }
+  .typing { align-self:flex-start; background:var(--bg-surface); border:1px solid var(--border-default);
+    border-radius: 18px 18px 18px 5px; padding: 14px 16px; display:flex; gap:5px; }
+  .typing span { width:7px;height:7px;border-radius:999px;background:#C7BFB1; }
+  .composer { position:absolute; left:16px; right:16px; bottom:14px;
+    background: var(--bg-surface); border:1.5px solid var(--border-default);
+    border-radius: 999px; box-shadow: var(--shadow-card);
+    display:flex; align-items:center; gap:10px; padding: 7px 7px 7px 18px; }
+  .composer input { flex:1; border:none; outline:none; background:transparent;
+    font: 400 15px var(--font-body); }
+  .composer input::placeholder { color:#9AA39F; }
+  .send { width:42px;height:42px;border-radius:999px;background:var(--brand-gradient);
+    border:none;display:grid;place-items:center;color:#fff;flex:none; }
+
+  /* --- Results / verdict (the SIGNATURE) --- */
+  .results-head { padding: 4px 0 8px; }
+  .results-head .q { font: 700 18px var(--font-display); }
+  .results-head .meta { color: var(--text-secondary); font-size: 13px; margin-top: 2px; }
+  .verdict {
+    margin-top: 14px; border-radius: 20px; overflow:hidden;
+    box-shadow: var(--shadow-lift); border: 1px solid #EBD7AE;
+  }
+  .verdict__ribbon {
+    background: var(--accent-gradient); color: var(--text-on-gold);
+    padding: 8px 16px; font: 800 13px var(--font-display);
+    display:flex; align-items:center; gap:7px; letter-spacing:.01em;
+  }
+  .resultcard { background: var(--bg-surface); padding: 14px; display:flex; gap: 14px; }
+  .resultcard__img { width: 92px; height: 92px; border-radius: 14px; flex:none;
+    background: var(--bg-surface-alt); display:grid; place-items:center; overflow:hidden; }
+  .resultcard__body { flex:1; min-width:0; display:flex; flex-direction:column; gap:5px; }
+  .resultcard__name { font: 600 16px/22px var(--font-display); }
+  .resultcard__why { font: 400 12.5px/18px var(--font-body); color: var(--brand-primary);
+    background: var(--brand-primary-soft); padding: 5px 9px; border-radius:9px; align-self:flex-start;
+    display:inline-flex; gap:5px; align-items:center; }
+  .resultcard__provider { color: var(--text-secondary); font-size: 13px; }
+  .resultcard__foot { display:flex; align-items:center; justify-content:space-between; margin-top:2px; }
+  .price { font: 800 22px/1 var(--font-display); color: var(--accent-gold-strong); }
+  .price small { font: 500 12px var(--font-body); color: var(--text-secondary); }
+  .go { width:44px;height:44px;border-radius:14px;background:var(--brand-primary-soft);
+    color:var(--brand-primary);border:none;display:grid;place-items:center; }
+  .ranklist { display:flex; flex-direction:column; gap:12px; margin-top: 14px; }
+  .ranklist .card { padding:14px; display:flex; gap:14px; }
+  .rankno { font: 800 13px var(--font-display); color: var(--text-secondary);
+    width:22px; flex:none; padding-top:2px; }
+
+  /* --- Paywall --- */
+  .paywall { position:absolute; inset:0; background: var(--overlay-scrim);
+    display:flex; align-items:flex-end; z-index:60; }
+  .sheet { background: var(--bg-canvas); width:100%; border-radius: 24px 24px 0 0;
+    padding: 10px 20px 26px; box-shadow: 0 -10px 40px rgba(0,0,0,0.2); }
+  .grabber { width:40px;height:5px;border-radius:999px;background:var(--border-strong);
+    margin: 4px auto 16px; }
+  .sheet__crown { width:64px;height:64px;border-radius:20px;background:var(--accent-gold-soft);
+    display:grid;place-items:center;margin: 0 auto 14px; }
+  .sheet h2 { text-align:center; font: 800 22px/30px var(--font-display); }
+  .sheet .sub { text-align:center; color:var(--text-secondary); font-size:14px; margin:6px 0 18px; }
+  .pricebig { text-align:center; margin-bottom: 6px; }
+  .pricebig .amt { font: 800 40px/1 var(--font-display); color: var(--brand-primary); }
+  .pricebig .per { color:var(--text-secondary); font-size:14px; }
+  .valuelist { list-style:none; margin: 14px 0 18px; display:flex; flex-direction:column; gap:12px; }
+  .valuelist li { display:flex; align-items:center; gap:11px; font: 500 15px var(--font-body); }
+  .valuelist .ck { width:26px;height:26px;border-radius:999px;background:var(--brand-primary-soft);
+    color:var(--brand-primary);display:grid;place-items:center;flex:none; }
+  .fineprint { text-align:center; color:var(--text-secondary); font-size:11.5px; margin-top:12px; line-height:18px; }
+  .fineprint a { color: var(--brand-primary); text-decoration:none; }
+
+  /* --- Profile --- */
+  .profile-hero { display:flex; flex-direction:column; align-items:center; gap:6px;
+    padding: 8px 0 18px; }
+  .profile-hero .name { font: 700 22px var(--font-display); }
+  .profile-hero .email { color: var(--text-secondary); font-size:14px; }
+  .banner { display:flex; align-items:center; gap:10px; padding:12px 14px; border-radius:14px;
+    font: 500 13px/18px var(--font-body); margin-bottom: 16px; }
+  .banner--warn { background: var(--accent-gold-soft); color: var(--accent-gold-strong);
+    border:1px solid #EBD7AE; }
+  .banner a { color: inherit; font-weight:700; text-decoration:underline; }
+  .rows { background:var(--bg-surface); border:1px solid var(--border-default);
+    border-radius: var(--r-card); overflow:hidden; box-shadow: var(--shadow-card); }
+  .row { display:flex; align-items:center; gap:12px; padding: 15px 16px;
+    border-bottom: 1px solid var(--border-default); }
+  .row:last-child { border-bottom:none; }
+  .row .lead { width:38px;height:38px;border-radius:11px;background:var(--brand-primary-soft);
+    color:var(--brand-primary);display:grid;place-items:center;flex:none; }
+  .row .lbl { flex:1; font: 500 15.5px var(--font-body); }
+  .row .val { color: var(--text-secondary); font-size: 14px; }
+  .row .val .num { color: var(--text-secondary); }
+  .row--destructive .lead { background:#FBE7E2; color:var(--state-error); }
+  .row--destructive .lbl { color: var(--state-error); }
+  .section-h { font: 700 13px var(--font-display); letter-spacing:.03em; color:var(--text-secondary);
+    margin: 22px 4px 10px; }
+</style>
+</head>
+<body>
+
+<div class="gallery-title">‏BestOffers — التصميم البصري v2</div>
+<div class="gallery-sub">واجهة عربية أولاً · RTL · كونسيرج التسوّق الذكي — الكويت · WCAG AA · أرقام لاتينية (0-9)</div>
+<div class="gallery-sub" style="margin-top:-22px;">المسار: اختيار القسم ← البحث ← الأسئلة التوضيحية ← النتائج</div>
+
+<!-- ======================= 0 · CATEGORY SELECT (NEW FIRST SCREEN) ======================= -->
+<div class="stack">
+<div class="screen-label">0 · Category select (first screen)</div>
+<div class="phone">
+  <div class="phone__notch"></div>
+  <div class="statusbar"><span>9:41</span>
+    <span class="right">
+      <svg width="17" height="12" viewBox="0 0 17 12" fill="currentColor"><rect x="0" y="7" width="3" height="5" rx="1"/><rect x="4.5" y="4.5" width="3" height="7.5" rx="1"/><rect x="9" y="2" width="3" height="10" rx="1"/><rect x="13.5" y="0" width="3" height="12" rx="1"/></svg>
+      <svg width="22" height="12" viewBox="0 0 22 12" fill="none"><rect x="1" y="1" width="18" height="10" rx="2.5" stroke="currentColor"/><rect x="2.5" y="2.5" width="13" height="7" rx="1.2" fill="currentColor"/><rect x="20" y="4" width="1.6" height="4" rx="0.8" fill="currentColor"/></svg>
+    </span>
+  </div>
+  <div class="screen">
+    <!-- top bar: avatar + settings overflow (no quota here — metering starts at search) -->
+    <div class="appbar" style="justify-content:space-between;">
+      <div style="display:flex;align-items:center;gap:10px;">
+        <div class="avatar avatar--sm">ن</div>
+      </div>
+      <button class="icon-btn" aria-label="الإعدادات">
+        <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="5" r="1.6"/><circle cx="12" cy="12" r="1.6"/><circle cx="12" cy="19" r="1.6"/></svg>
+      </button>
+    </div>
+
+    <div class="cat-hero">
+      <span class="eyebrow">BESTOFFERS · أفضل العروض</span>
+      <h1>شنو تبي تلقّى اليوم؟</h1>
+      <p>اختر القسم، ونلقّى لك أفضل عرض — بلا إعلانات مدفوعة.</p>
+    </div>
+
+    <div class="cat-grid">
+      <!-- Electronics (active) -->
+      <button class="cat-tile cat-tile--active" aria-label="الإلكترونيات">
+        <span class="cat-tile__go"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2"><path d="M14 6l-6 6 6 6"/></svg></span>
+        <span class="ic"><svg width="26" height="26" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="2" y="4" width="20" height="13" rx="2"/><path d="M8 21h8M12 17v4"/></svg></span>
+        <span class="cat-tile__labels"><h3>الإلكترونيات</h3><span class="en">Electronics</span></span>
+      </button>
+
+      <!-- Food (active) -->
+      <button class="cat-tile cat-tile--active" aria-label="الطعام">
+        <span class="cat-tile__go"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2"><path d="M14 6l-6 6 6 6"/></svg></span>
+        <span class="ic"><svg width="26" height="26" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 3v7a3 3 0 0 0 6 0V3M7 10v11M18 3c-1.7 0-3 2-3 5s1.3 4 3 4M18 12v9"/></svg></span>
+        <span class="cat-tile__labels"><h3>الطعام</h3><span class="en">Food</span></span>
+      </button>
+
+      <!-- Furniture (soon) -->
+      <button class="cat-tile cat-tile--soon" aria-disabled="true" disabled>
+        <span class="tag tag--soon">قريباً · Soon</span>
+        <span class="ic"><svg width="26" height="26" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 11V7a2 2 0 0 1 2-2h12a2 2 0 0 1 2 2v4M3 11h18v6M6 17v3M18 17v3"/></svg></span>
+        <span class="cat-tile__labels"><h3>الأثاث</h3><span class="en">Furniture</span></span>
+      </button>
+
+      <!-- Cars (soon) -->
+      <button class="cat-tile cat-tile--soon" aria-disabled="true" disabled>
+        <span class="tag tag--soon">قريباً · Soon</span>
+        <span class="ic"><svg width="26" height="26" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 13l2-5a2 2 0 0 1 1.9-1.3h10.2A2 2 0 0 1 19 8l2 5M5 13h14v4H5zM7 17v2M17 17v2"/><circle cx="7.5" cy="14.5" r="0.6"/><circle cx="16.5" cy="14.5" r="0.6"/></svg></span>
+        <span class="cat-tile__labels"><h3>السيارات</h3><span class="en">Cars</span></span>
+      </button>
+    </div>
+
+    <div class="cat-note">
+      <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="flex:none;"><circle cx="12" cy="12" r="9"/><path d="M12 8h.01M11 12h1v4h1"/></svg>
+      <span>نضيف أقساماً جديدة قريباً. ابدأ بالإلكترونيات أو الطعام.</span>
+    </div>
+  </div>
+</div>
+</div>
+
+<!-- ======================= 1 · SEARCH / INTENT (per category) ======================= -->
+<div class="stack">
+<div class="screen-label">1 · Search / Intent (Electronics)</div>
+<div class="phone">
+  <div class="phone__notch"></div>
+  <div class="statusbar"><span>9:41</span>
+    <span class="right">
+      <svg width="17" height="12" viewBox="0 0 17 12" fill="currentColor"><rect x="0" y="7" width="3" height="5" rx="1"/><rect x="4.5" y="4.5" width="3" height="7.5" rx="1"/><rect x="9" y="2" width="3" height="10" rx="1"/><rect x="13.5" y="0" width="3" height="12" rx="1"/></svg>
+      <svg width="22" height="12" viewBox="0 0 22 12" fill="none"><rect x="1" y="1" width="18" height="10" rx="2.5" stroke="currentColor"/><rect x="2.5" y="2.5" width="13" height="7" rx="1.2" fill="currentColor"/><rect x="20" y="4" width="1.6" height="4" rx="0.8" fill="currentColor"/></svg>
+    </span>
+  </div>
+  <div class="screen">
+    <!-- top bar: back to categories + quota + settings -->
+    <div class="appbar" style="justify-content:space-between;">
+      <div style="display:flex;align-items:center;gap:10px;">
+        <button class="icon-btn" aria-label="رجوع للأقسام"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M10 6l6 6-6 6"/></svg></button>
+        <span class="quota"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4"><path d="M5 3l1.5 4L11 8.5 6.5 10 5 14 3.5 10 -.5 8.5 3.5 7z" transform="translate(7 1)"/></svg>‏<span class="num">3</span> عمليات بحث مجانية</span>
+      </div>
+      <button class="icon-btn" aria-label="الإعدادات">
+        <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="5" r="1.6"/><circle cx="12" cy="12" r="1.6"/><circle cx="12" cy="19" r="1.6"/></svg>
+      </button>
+    </div>
+
+    <div class="hero-greeting">
+      <span class="eyebrow">ELECTRONICS · الإلكترونيات</span>
+      <h1>شنو تدوّر اليوم؟</h1>
+      <p>اكتب طلبك بكل بساطة — ونلقّى لك أفضل عرض.</p>
+    </div>
+
+    <!-- hero search box -->
+    <div class="searchbox">
+      <div class="searchbox__row">
+        <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="7"/><path d="M20 20l-3.2-3.2"/></svg>
+        <textarea class="searchbox__input" rows="2" readonly>آيفون 17 Pro Max بسعة كبيرة وبسعر مناسب</textarea>
+        <button class="mic" aria-label="بحث صوتي">
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="9" y="3" width="6" height="11" rx="3"/><path d="M5 11a7 7 0 0 0 14 0M12 18v3"/></svg>
+        </button>
+      </div>
+      <div class="searchbox__hint">نفهم اللهجة الكويتية والخليجية — ونرتّب النتائج حسب أفضل قيمة، بلا إعلانات مدفوعة.</div>
+    </div>
+    <button class="btn btn--primary" style="margin-top:14px;">ابحث عن أفضل عرض
+      <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2"><path d="M14 6l-6 6 6 6"/></svg>
+    </button>
+
+    <div class="suggest-title">عمليات بحث حديثة</div>
+    <div class="suggest-row"><span class="ico"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/></svg></span><span class="txt">سماعات لاسلكية بعزل ضوضاء</span><span class="arr"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M14 6l-6 6 6 6"/></svg></span></div>
+    <div class="suggest-row"><span class="ico"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/></svg></span><span class="txt">لابتوب للألعاب تحت ٣٠٠ دينار</span><span class="arr"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M14 6l-6 6 6 6"/></svg></span></div>
+  </div>
+</div>
+</div>
+
+<!-- ======================= 2 · CLARIFIER ======================= -->
+<div class="stack">
+<div class="screen-label">2 · Clarifier (AI chat)</div>
+<div class="phone">
+  <div class="phone__notch"></div>
+  <div class="statusbar"><span>9:41</span>
+    <span class="right">
+      <svg width="17" height="12" viewBox="0 0 17 12" fill="currentColor"><rect x="0" y="7" width="3" height="5" rx="1"/><rect x="4.5" y="4.5" width="3" height="7.5" rx="1"/><rect x="9" y="2" width="3" height="10" rx="1"/><rect x="13.5" y="0" width="3" height="12" rx="1"/></svg>
+      <svg width="22" height="12" viewBox="0 0 22 12" fill="none"><rect x="1" y="1" width="18" height="10" rx="2.5" stroke="currentColor"/><rect x="2.5" y="2.5" width="13" height="7" rx="1.2" fill="currentColor"/><rect x="20" y="4" width="1.6" height="4" rx="0.8" fill="currentColor"/></svg>
+    </span>
+  </div>
+  <div class="screen">
+    <div class="appbar">
+      <button class="icon-btn" aria-label="رجوع"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M10 6l6 6-6 6"/></svg></button>
+      <h1 style="flex:1;">نضبط بحثك</h1>
+      <span class="quota"><span class="num">سؤال 2/3</span></span>
+    </div>
+
+    <div class="chat">
+      <div class="bubble bubble--ai">تمام! آيفون 17 Pro Max. أي سعة تخزين تناسبك؟</div>
+      <div class="chips-row">
+        <button class="chip">256GB</button>
+        <button class="chip chip--selected">512GB ✓</button>
+        <button class="chip">1TB</button>
+      </div>
+      <div class="bubble bubble--user"><span class="num">512</span> — وأبيه يكون موفّر بالسعر</div>
+      <div class="bubble bubble--ai">ممتاز. وأي لون تفضّل؟ تقدر تتخطّى وأختار لك الأوفر.</div>
+      <div class="chips-row">
+        <button class="chip">تيتانيوم طبيعي</button>
+        <button class="chip">أسود</button>
+        <button class="chip">صحراوي</button>
+        <button class="chip chip--skip">تخطّي</button>
+      </div>
+      <div class="typing"><span></span><span></span><span></span></div>
+    </div>
+
+    <div class="composer">
+      <input placeholder="اكتب إجابتك أو عدّل طلبك…" readonly />
+      <button class="send" aria-label="إرسال"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2"><path d="M20 4L4 11l6 2 2 6 8-15z"/></svg></button>
+    </div>
+  </div>
+</div>
+</div>
+
+<!-- ======================= 3 · RESULTS ======================= -->
+<div class="stack">
+<div class="screen-label">3 · Results (best-price verdict)</div>
+<div class="phone">
+  <div class="phone__notch"></div>
+  <div class="statusbar"><span>9:41</span>
+    <span class="right">
+      <svg width="17" height="12" viewBox="0 0 17 12" fill="currentColor"><rect x="0" y="7" width="3" height="5" rx="1"/><rect x="4.5" y="4.5" width="3" height="7.5" rx="1"/><rect x="9" y="2" width="3" height="10" rx="1"/><rect x="13.5" y="0" width="3" height="12" rx="1"/></svg>
+      <svg width="22" height="12" viewBox="0 0 22 12" fill="none"><rect x="1" y="1" width="18" height="10" rx="2.5" stroke="currentColor"/><rect x="2.5" y="2.5" width="13" height="7" rx="1.2" fill="currentColor"/><rect x="20" y="4" width="1.6" height="4" rx="0.8" fill="currentColor"/></svg>
+    </span>
+  </div>
+  <div class="screen">
+    <div class="appbar">
+      <button class="icon-btn" aria-label="رجوع"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M10 6l6 6-6 6"/></svg></button>
+      <div class="results-head" style="flex:1;">
+        <div class="q">آيفون 17 Pro Max · 512GB</div>
+        <div class="meta">رتّبنا <span class="num">8</span> عروض حسب أفضل قيمة لك</div>
+      </div>
+      <button class="icon-btn" aria-label="بحث جديد"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 5v14M5 12h14"/></svg></button>
+    </div>
+
+    <!-- SIGNATURE: best-price verdict -->
+    <div class="verdict">
+      <div class="verdict__ribbon">
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.6"><path d="M20 6L9 17l-5-5"/></svg>
+        أفضل عرض — أوفر بـ <span class="num">‎18 د.ك</span> من المتوسط
+      </div>
+      <div class="resultcard">
+        <div class="resultcard__img">
+          <svg width="46" height="46" viewBox="0 0 24 24" fill="none" stroke="#9AA39F" stroke-width="1.5"><rect x="6" y="2" width="12" height="20" rx="3"/><path d="M10 18h4"/></svg>
+        </div>
+        <div class="resultcard__body">
+          <div class="resultcard__name">‏iPhone 17 Pro Max · ‎512GB تيتانيوم</div>
+          <span class="resultcard__why"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4"><path d="M20 6L9 17l-5-5"/></svg> يطابق السعة المطلوبة وبأقل سعر</span>
+          <div class="resultcard__provider">Xcite — إكسايت</div>
+          <div class="resultcard__foot">
+            <div class="price"><span class="num">‎412.000</span> <small>د.ك</small></div>
+            <button class="go" aria-label="اذهب للمتجر"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M15 6l-6 6 6 6"/></svg></button>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div class="ranklist">
+      <div class="card">
+        <span class="rankno"><span class="num">2</span></span>
+        <div class="resultcard__img" style="width:72px;height:72px;"><svg width="36" height="36" viewBox="0 0 24 24" fill="none" stroke="#9AA39F" stroke-width="1.5"><rect x="6" y="2" width="12" height="20" rx="3"/><path d="M10 18h4"/></svg></div>
+        <div class="resultcard__body">
+          <div class="resultcard__name" style="font-size:15px;">‏iPhone 17 Pro Max · ‎512GB</div>
+          <div class="resultcard__provider">Eureka — يوريكا</div>
+          <div class="resultcard__foot"><div class="price" style="font-size:19px;"><span class="num">‎418.000</span> <small>د.ك</small></div><button class="go" style="width:38px;height:38px;"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M15 6l-6 6 6 6"/></svg></button></div>
+        </div>
+      </div>
+      <div class="card">
+        <span class="rankno"><span class="num">3</span></span>
+        <div class="resultcard__img" style="width:72px;height:72px;"><svg width="36" height="36" viewBox="0 0 24 24" fill="none" stroke="#9AA39F" stroke-width="1.5"><rect x="6" y="2" width="12" height="20" rx="3"/><path d="M10 18h4"/></svg></div>
+        <div class="resultcard__body">
+          <div class="resultcard__name" style="font-size:15px;">‏iPhone 17 Pro Max · ‎512GB</div>
+          <div class="resultcard__provider">Best Al-Yousifi — اليوسفي</div>
+          <div class="resultcard__foot"><div class="price" style="font-size:19px;"><span class="num">‎425.500</span> <small>د.ك</small></div><button class="go" style="width:38px;height:38px;"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M15 6l-6 6 6 6"/></svg></button></div>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+</div>
+
+<!-- ======================= 4 · PAYWALL ======================= -->
+<div class="stack">
+<div class="screen-label">4 · Paywall</div>
+<div class="phone">
+  <div class="phone__notch"></div>
+  <div class="statusbar"><span>9:41</span>
+    <span class="right">
+      <svg width="17" height="12" viewBox="0 0 17 12" fill="currentColor"><rect x="0" y="7" width="3" height="5" rx="1"/><rect x="4.5" y="4.5" width="3" height="7.5" rx="1"/><rect x="9" y="2" width="3" height="10" rx="1"/><rect x="13.5" y="0" width="3" height="12" rx="1"/></svg>
+      <svg width="22" height="12" viewBox="0 0 22 12" fill="none"><rect x="1" y="1" width="18" height="10" rx="2.5" stroke="currentColor"/><rect x="2.5" y="2.5" width="13" height="7" rx="1.2" fill="currentColor"/><rect x="20" y="4" width="1.6" height="4" rx="0.8" fill="currentColor"/></svg>
+    </span>
+  </div>
+  <!-- dimmed home behind -->
+  <div class="screen" style="filter:saturate(.6);opacity:.5;">
+    <div class="appbar" style="justify-content:space-between;">
+      <div class="avatar avatar--sm">ن</div>
+      <button class="icon-btn"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="5" r="1.6"/><circle cx="12" cy="12" r="1.6"/><circle cx="12" cy="19" r="1.6"/></svg></button>
+    </div>
+    <div class="hero-greeting"><span class="eyebrow">ELECTRONICS</span><h1>شنو تدوّر اليوم؟</h1></div>
+    <div class="searchbox" style="margin-top:14px;"><div class="searchbox__row"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="#9AA39F" stroke-width="2"><circle cx="11" cy="11" r="7"/><path d="M20 20l-3.2-3.2"/></svg><span style="color:#9AA39F;">شنو تدوّر؟</span></div></div>
+  </div>
+  <!-- paywall sheet -->
+  <div class="paywall">
+    <div class="sheet">
+      <div class="grabber"></div>
+      <div class="sheet__crown">
+        <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="#C8881C" stroke-width="2"><path d="M3 8l4 3 5-6 5 6 4-3-2 11H5L3 8z"/></svg>
+      </div>
+      <h2>واصل العثور على أفضل العروض</h2>
+      <p class="sub">استهلكت عمليات البحث المجانية الخمس.<br/>اشترك وابحث بلا حدود.</p>
+      <div class="pricebig"><span class="amt"><span class="num">$1</span></span> <span class="per">/ شهرياً</span></div>
+      <ul class="valuelist">
+        <li><span class="ck"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.6"><path d="M20 6L9 17l-5-5"/></svg></span> بحث غير محدود عن أفضل العروض</li>
+        <li><span class="ck"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.6"><path d="M20 6L9 17l-5-5"/></svg></span> تنبيهات عند انخفاض الأسعار</li>
+        <li><span class="ck"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.6"><path d="M20 6L9 17l-5-5"/></svg></span> ترتيب محايد — بلا إعلانات مدفوعة</li>
+      </ul>
+      <button class="btn btn--primary">اشترك مقابل <span class="num">$1</span> شهرياً</button>
+      <button class="btn btn--ghost" style="margin-top:8px;">لديك اشتراك؟ استعادة الشراء</button>
+      <div class="fineprint">يُحصّل بالدولار الأمريكي · يُجدّد شهرياً، ألغِ في أي وقت<br/><a href="#">الشروط</a> · <a href="#">الخصوصية</a></div>
+    </div>
+  </div>
+</div>
+</div>
+
+<!-- ======================= 5 · PROFILE ======================= -->
+<div class="stack">
+<div class="screen-label">5 · Profile</div>
+<div class="phone">
+  <div class="phone__notch"></div>
+  <div class="statusbar"><span>9:41</span>
+    <span class="right">
+      <svg width="17" height="12" viewBox="0 0 17 12" fill="currentColor"><rect x="0" y="7" width="3" height="5" rx="1"/><rect x="4.5" y="4.5" width="3" height="7.5" rx="1"/><rect x="9" y="2" width="3" height="10" rx="1"/><rect x="13.5" y="0" width="3" height="12" rx="1"/></svg>
+      <svg width="22" height="12" viewBox="0 0 22 12" fill="none"><rect x="1" y="1" width="18" height="10" rx="2.5" stroke="currentColor"/><rect x="2.5" y="2.5" width="13" height="7" rx="1.2" fill="currentColor"/><rect x="20" y="4" width="1.6" height="4" rx="0.8" fill="currentColor"/></svg>
+    </span>
+  </div>
+  <div class="screen">
+    <div class="appbar">
+      <button class="icon-btn" aria-label="رجوع"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M10 6l6 6-6 6"/></svg></button>
+      <h1 style="flex:1;">الملف الشخصي</h1>
+      <button class="btn--ghost" style="border:none;background:none;color:var(--brand-primary);font:600 15px var(--font-display);">تعديل</button>
+    </div>
+
+    <div class="profile-hero">
+      <div class="avatar avatar--lg">ن</div>
+      <div class="name">نورة العبدالله</div>
+      <div class="email" dir="ltr">noura@email.com</div>
+      <span class="tag tag--pro" style="margin-top:6px;">عضو Pro</span>
+    </div>
+
+    <div class="banner banner--warn">
+      <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="flex:none;"><path d="M12 9v4M12 17h.01M10.3 3.9 2 18a2 2 0 0 0 1.7 3h16.6a2 2 0 0 0 1.7-3L13.7 3.9a2 2 0 0 0-3.4 0z"/></svg>
+      <span>تحقّق من بريدك الإلكتروني لإكمال التحديث. <a href="#">إعادة الإرسال</a></span>
+    </div>
+
+    <div class="section-h">الحساب</div>
+    <div class="rows">
+      <div class="row"><span class="lead"><svg width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M22 16.9v3a2 2 0 0 1-2.2 2 19.8 19.8 0 0 1-8.6-3 19.5 19.5 0 0 1-6-6 19.8 19.8 0 0 1-3-8.6A2 2 0 0 1 4.1 2h3a2 2 0 0 1 2 1.7c.1.9.4 1.8.7 2.7a2 2 0 0 1-.5 2.1L8.1 9.9a16 16 0 0 0 6 6l1.4-1.2a2 2 0 0 1 2.1-.5c.9.3 1.8.6 2.7.7a2 2 0 0 1 1.7 2z"/></svg></span><span class="lbl">رقم الهاتف</span><span class="val"><span class="num">+965 •••• ‎67</span></span></div>
+      <div class="row"><span class="lead"><svg width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 5l9 7 9-7"/><rect x="3" y="5" width="18" height="14" rx="2"/></svg></span><span class="lbl">الاشتراك</span><span class="val" style="color:var(--brand-primary);font-weight:600;">Pro · يُجدّد ‎15 يوليو</span><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#B7B0A4" stroke-width="2"><path d="M14 6l-6 6 6 6"/></svg></div>
+    </div>
+
+    <div class="section-h">عام</div>
+    <div class="rows">
+      <div class="row"><span class="lead"><svg width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="9"/><path d="M3 12h18M12 3a14 14 0 0 1 0 18 14 14 0 0 1 0-18z"/></svg></span><span class="lbl">اللغة</span><span class="val">العربية</span><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#B7B0A4" stroke-width="2"><path d="M14 6l-6 6 6 6"/></svg></div>
+      <div class="row row--destructive"><span class="lead"><svg width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4M16 17l5-5-5-5M21 12H9"/></svg></span><span class="lbl">تسجيل الخروج</span></div>
+    </div>
+  </div>
+</div>
+</div>
+
+</body>
+</html>

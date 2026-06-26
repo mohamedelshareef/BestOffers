@@ -1,0 +1,71 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1024 1024" width="1024" height="1024" role="img" aria-label="BestOffers app icon">
+  <title>BestOffers App Icon</title>
+  <defs>
+    <!-- Background: deep teal gradient — matches --brand-gradient (#0E8C74 → #075345) -->
+    <linearGradient id="bgGrad" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#0E8C74"/>
+      <stop offset="100%" stop-color="#075345"/>
+    </linearGradient>
+    <!-- Spark bars: white → deal-gold (#C8881C) — v2 canonical accent -->
+    <linearGradient id="sparkIconGrad" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#FFFFFF" stop-opacity="0.95"/>
+      <stop offset="100%" stop-color="#C8881C"/>
+    </linearGradient>
+    <!-- Deal-gold radial core — v2: #C8881C → #E0A93B (accent-gradient stops) -->
+    <radialGradient id="coreGlow" cx="50%" cy="50%" r="50%">
+      <stop offset="0%" stop-color="#E0A93B"/>
+      <stop offset="100%" stop-color="#C8881C"/>
+    </radialGradient>
+    <!-- Shadow for depth on spark bars -->
+    <filter id="sparkShadow" x="-20%" y="-20%" width="140%" height="140%">
+      <feDropShadow dx="0" dy="4" stdDeviation="8" flood-color="#000000" flood-opacity="0.18"/>
+    </filter>
+  </defs>
+
+  <!-- ═══════════════════════════
+       APP ICON BACKGROUND
+       Rounded square (iOS/Android
+       standard; clip applied by OS).
+       Deep teal gradient — v2 brand-gradient.
+       ═══════════════════════════ -->
+  <rect width="1024" height="1024" rx="224" fill="url(#bgGrad)"/>
+
+  <!-- Subtle inner highlight ring (top-left light source) -->
+  <rect
+    width="1024" height="1024" rx="224"
+    fill="none"
+    stroke="#FFFFFF"
+    stroke-width="2"
+    stroke-opacity="0.08"
+  />
+
+  <!-- ═══════════════════════════
+       SPARK MARK (centred, 440×440)
+       Four-pointed star / cross:
+       vertical + horizontal rounded
+       bars meeting at a deal-gold core.
+       v2: spark bars white→#C8881C,
+       core glow #E0A93B→#C8881C.
+       ═══════════════════════════ -->
+  <g transform="translate(512,512)" filter="url(#sparkShadow)">
+    <!-- Vertical bar -->
+    <rect
+      x="-56" y="-220"
+      width="112" height="440"
+      rx="56"
+      fill="url(#sparkIconGrad)"
+    />
+    <!-- Horizontal bar -->
+    <rect
+      x="-220" y="-56"
+      width="440" height="112"
+      rx="56"
+      fill="url(#sparkIconGrad)"
+    />
+    <!-- Deal-gold centre core — v2: #C8881C radial -->
+    <circle cx="0" cy="0" r="72" fill="url(#coreGlow)"/>
+    <!-- Bright inner highlight on core -->
+    <circle cx="-18" cy="-18" r="24" fill="#FFFFFF" opacity="0.35"/>
+  </g>
+
+</svg>
