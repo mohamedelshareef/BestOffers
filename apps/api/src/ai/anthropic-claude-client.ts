@@ -29,6 +29,16 @@ import {
 export class AnthropicClaudeClient implements ClaudeClient {
   private readonly logger = new Logger(AnthropicClaudeClient.name);
   private readonly model = process.env.CLAUDE_MODEL ?? 'claude-opus-4-8';
+  // SPEED (OWNER DIRECTIVE 2026-06-26, RULE-10): the ≥5 clarifier QUESTIONS are now config-driven
+  // (clarifier-sets.ts) — Claude no longer GENERATES them. The only remaining clarifier-phase model
+  // call is the single intent-normalization `clarify`, which runs on the FAST model (Haiku) by default
+  // to keep the clarifier phase quick. Override with CLAUDE_CLARIFY_MODEL.
+  private readonly clarifyModel = process.env.CLAUDE_CLARIFY_MODEL ?? 'claude-haiku-4-5';
+  // SPEED: rank-explanations are short, low-stakes "why" lines (not pricing/ranking — those are CODE).
+  // Use the FAST model (Haiku) for them by default; Opus is overkill and the slow path on food queries
+  // with dozens of dishes. Override with CLAUDE_EXPLAIN_MODEL.
+  private readonly explainModel =
+    process.env.CLAUDE_EXPLAIN_MODEL ?? 'claude-haiku-4-5';
   private client: any;
 
   private get apiKey(): string | undefined {
@@ -69,6 +79,13 @@ export class AnthropicClaudeClient implements ClaudeClient {
       'Users write in Kuwaiti Arabic dialect, MSA, or English. Normalize to a structured intent.',
       'You ask AT MOST ONE clarifying question per turn, and ONLY for a dimension not already known',
       'and not already in askedDimensions. Probe missing dimensions in this order: storage, color, budget.',
+      // PRECISION (owner directive): keep the question tightly scoped to the SAME requested item.
+      'Every question MUST narrow down the EXACT item the user asked for — never drift to a different',
+      'product, a different model/generation, accessories, or unrelated attributes. Do NOT ask about',
+      'a dimension that does not apply to this product (e.g. never ask storage for a fridge, color for',
+      'a service). If the requested item is already specific enough to search, set needClarification=false',
+      'rather than padding with a low-value question. Preserve the user\'s exact model — do NOT broaden',
+      '"iPhone 16" to "iPhone 16 Pro" or substitute a different brand.',
       'If category/brand/model + enough constraints are known, set needClarification=false.',
       'You NEVER invent prices, providers, or stock. You only normalize intent and ask one question.',
       'Always call the `emit_clarifier` tool with the structured result. Provide Arabic (textAr) and',
@@ -133,7 +150,7 @@ export class AnthropicClaudeClient implements ClaudeClient {
     });
 
     const res = await client.messages.create({
-      model: this.model,
+      model: this.clarifyModel, // RULE-10: fast model for the clarifier phase
       max_tokens: 1024,
       system,
       tools: [tool],
@@ -151,7 +168,7 @@ export class AnthropicClaudeClient implements ClaudeClient {
 
     const needClarification = !!out.needClarification && !!out.question;
     this.logger.log(
-      `clarify: model=${this.model} need=${needClarification} ` +
+      `clarify: model=${this.clarifyModel} need=${needClarification} ` +
         `cat=${intentNormalized.category ?? '-'} model_field=${intentNormalized.model ?? '-'} ` +
         `q=${out.question?.dimension ?? '-'}`,
     );
@@ -206,6 +223,11 @@ export class AnthropicClaudeClient implements ClaudeClient {
       '`citedAttributeKey` to the ONE supplied attribute your explanation is grounded in.',
       `citedAttributeKey MUST be one of: ${citableKeys.join(', ')}, and that attribute MUST be present`,
       'for that offer. Rank 0 is the best/cheapest pick — say so. Keep each line under 12 words.',
+      // PRECISION (owner directive): the "why" must reference the ACTUAL attribute the user asked about
+      // (the supplied intentNormalized: the model/storage/color/budget they requested). Cite the
+      // attribute that makes THIS offer relevant to THAT request. Do NOT pad with unrelated praise,
+      // generic marketing ("great phone!"), or attributes the user did not ask about. No emojis.
+      'If the only honest thing to say is the rank/price, say just that — fewer, true words beat padding.',
     ].join(' ');
 
     const tool = {
@@ -239,7 +261,7 @@ export class AnthropicClaudeClient implements ClaudeClient {
     });
 
     const res = await client.messages.create({
-      model: this.model,
+      model: this.explainModel,
       max_tokens: 2048,
       system,
       tools: [tool],
@@ -249,7 +271,7 @@ export class AnthropicClaudeClient implements ClaudeClient {
 
     const out = this.toolInput(res, 'emit_explanations');
     const list: RankExplanation[] = Array.isArray(out.explanations) ? out.explanations : [];
-    this.logger.log(`explainRanking: model=${this.model} explained=${list.length}/${offers.length}`);
+    this.logger.log(`explainRanking: model=${this.explainModel} explained=${list.length}/${offers.length}`);
     return list.map((e) => ({
       offerId: e.offerId,
       citedAttributeKey: e.citedAttributeKey,

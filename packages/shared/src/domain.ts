@@ -141,8 +141,16 @@ export interface SearchResponse {
   questions?: ClarifierQuestion[];
   /** present when state = results */
   cards?: ResultCard[];
-  /** how many clarifier questions have been asked so far (≤3, code-enforced). */
+  /**
+   * How many clarifier questions have been PRESENTED so far (answered or skipped). With the ≥5
+   * floor (PO directive 2026-06-26), this is the "N" in the "N of 5 / ٣ من ٥" progress indicator.
+   */
   clarifierCount: number;
+  /**
+   * Total questions to present before search dispatches — the ≥5 floor for this sector (the "of 5"
+   * denominator). Server-authoritative: search does NOT run until clarifierCount reaches this.
+   */
+  totalQuestions?: number;
   /** assumptions the system made on skipped/absent answers (AC C2.3). */
   assumptions?: string[];
   /**

@@ -55,6 +55,33 @@ function attr(o: ResolvedOffer, key: string): string | undefined {
 }
 
 /**
+ * Is `skuModel` EXACTLY the model the user asked for? (PRECISION, owner directive.)
+ * True when the SKU model equals the asked model, ignoring a trailing storage/color qualifier that
+ * some catalogs append (e.g. asked "iPhone 16" matches "iPhone 16" but NOT "iPhone 16 Pro Max" — the
+ * extra token "Pro Max" is a DIFFERENT model, not a storage/color variant). We compare token-wise:
+ * the SKU model must START with all asked tokens AND have no extra model-defining word after them.
+ * Trailing storage/color tokens (e.g. "128gb", "black") are tolerated, model tokens (pro/max/plus/
+ * ultra/mini/se/air + a bare number generation) are NOT.
+ */
+function modelIsExactlyAsked(skuModel: string, askedModel: string): boolean {
+  const asked = askedModel.toLowerCase().trim().split(/\s+/).filter(Boolean);
+  const sku = skuModel.toLowerCase().trim().split(/\s+/).filter(Boolean);
+  if (asked.length === 0) return true;
+  if (sku.length < asked.length) return false;
+  for (let i = 0; i < asked.length; i++) {
+    if (sku[i] !== asked[i]) return false; // must start with the asked model verbatim
+  }
+  // any EXTRA tokens beyond the asked model must be storage/color qualifiers, not model words.
+  const MODEL_WORDS = new Set(['pro', 'max', 'plus', 'ultra', 'mini', 'se', 'air', 'fe', 'lite', 'note']);
+  for (let i = asked.length; i < sku.length; i++) {
+    const tok = sku[i];
+    if (MODEL_WORDS.has(tok)) return false; // a model-defining word → different model, not exact
+    if (/^\d{1,2}$/.test(tok)) return false; // a bare generation number (e.g. "16" → "17") → different model
+  }
+  return true;
+}
+
+/**
  * Discovery-based sectors (food, real-estate) have NO pre-defined model identity: each resolved
  * offer is a dish/flat the lane discovered + ranked live against the free-text intent (ADR-005/006).
  * There is no "exact model" to anchor on and no adjacent-model/related-category fallback notion, so
@@ -73,7 +100,11 @@ export function isExactMatch(intent: IntentNormalized, o: ResolvedOffer): boolea
     return true;
   }
   const { storage, color, budgetFils } = intent.constraints;
-  if (intent.model && !o.sku.model.toLowerCase().includes(intent.model.toLowerCase())) return false;
+  // PRECISION (owner directive): an EXACT match must be the ASKED model, not merely a model that
+  // CONTAINS it. "iPhone 16" must NOT count "iPhone 16 Pro Max" / "iPhone 16 Plus" as exact — those
+  // are different products (they become `adjacent` alternatives via isAdjacent). Storage/color
+  // variants live in attrs, not the model string, so requiring exact model identity is correct here.
+  if (intent.model && !modelIsExactlyAsked(o.sku.model, intent.model)) return false;
   if (storage && attr(o, 'storage') !== String(storage).toLowerCase()) return false;
   if (color && attr(o, 'color') !== String(color).toLowerCase()) return false;
   if (budgetFils != null && o.offer.priceFils > budgetFils) return false;

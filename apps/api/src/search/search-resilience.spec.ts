@@ -4,6 +4,7 @@ import { EventsService } from '../events/events.service';
 import { ClaudeClient } from '../ai/claude-client.interface';
 import { OffersService, ResolvedOffer } from '../offers/offers.service';
 import { QuotaService } from '../quota/quota.service';
+import { skipToTerminal } from './clarifier-test-util';
 import { IntentNormalized, Offer, Sku } from '@bestoffers/shared';
 
 /**
@@ -63,7 +64,8 @@ function makeService(claude: ClaudeClient, resolved: ResolvedOffer[]): SearchSer
 describe('Search resilience (v2 HIGH defect fixes)', () => {
   it('D-V2-1: explainRanking throwing does NOT 500 — food still returns cards with a data-only why', async () => {
     const svc = makeService(flakyClaude({ clarifyAsks: false, explainThrows: true }), [oneFoodOffer()]);
-    const res = await svc.startIntent({ sector: 'food', locale: 'en', intentRaw: 'kfc' }, 'p1');
+    // ≥5 gate: food now asks ≥5 clarifiers too (OWNER DIRECTIVE 2026-06-26); skip through to results.
+    const res = await skipToTerminal(svc, await svc.startIntent({ sector: 'food', locale: 'en', intentRaw: 'kfc' }, 'p1'), 'p1');
     expect(res.state).toBe('results');
     expect(res.cards).toHaveLength(1);
     // data-only fallback "why" (price at provider), never blank, never invented
@@ -72,16 +74,29 @@ describe('Search resilience (v2 HIGH defect fixes)', () => {
     expect(res.cards![0].deeplinkUrl).toBe('https://www.talabat.com/kuwait/kfc');
   });
 
-  it('D-V2-1 #2: food is a discovery sector → goes straight to results, no clarifier (even if Claude asks)', async () => {
-    const svc = makeService(flakyClaude({ clarifyAsks: true, explainThrows: false }), [oneFoodOffer()]);
-    const res = await svc.startIntent({ sector: 'food', locale: 'en', intentRaw: 'kfc' }, 'p1');
-    expect(res.state).toBe('results');
-    expect(res.clarifierCount).toBe(0);
+  it('≥5 GATE: food now asks ≥5 clarifiers before search (SUPERSEDES the old discovery skip)', async () => {
+    // OWNER DIRECTIVE 2026-06-26: food/realestate are NO LONGER no-clarifier discovery sectors — every
+    // sector presents ≥5 dimensions before any provider dispatch. "kfc" pre-resolves `dish` (the raw
+    // query) so 4 more questions are asked → 5 presented total before results.
+    const svc = makeService(flakyClaude({ clarifyAsks: false, explainThrows: false }), [oneFoodOffer()]);
+    let res = await svc.startIntent({ sector: 'food', locale: 'en', intentRaw: 'kfc' }, 'p1');
+    expect(res.state).toBe('clarifying');
+    expect(res.totalQuestions).toBeGreaterThanOrEqual(5);
+    let presented = 0;
+    while (res.state === 'clarifying') {
+      presented = res.clarifierCount;
+      res = await svc.submitAnswer(
+        { searchSessionId: res.searchSessionId, dimension: res.questions![0].dimension, answer: '__skip__' },
+        'p1',
+      );
+    }
+    expect(presented).toBeGreaterThanOrEqual(5); // ≥5 presented before search dispatched
+    expect(res.state).toBe('results'); // skip-all still searches (never a dead end)
   });
 
   it('D-V2-2: a genuinely empty food result carries ≥1 broadenSuggestions — never a bare 0', async () => {
     const svc = makeService(flakyClaude({ clarifyAsks: false, explainThrows: false }), []);
-    const res = await svc.startIntent({ sector: 'food', locale: 'en', intentRaw: 'zzznotareal' }, 'p1');
+    const res = await skipToTerminal(svc, await svc.startIntent({ sector: 'food', locale: 'en', intentRaw: 'zzznotareal' }, 'p1'), 'p1');
     expect(res.state).toBe('empty');
     expect(res.cards).toEqual([]);
     expect(res.broadenSuggestions && res.broadenSuggestions.length).toBeGreaterThanOrEqual(1);

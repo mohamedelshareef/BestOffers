@@ -41,6 +41,8 @@ const STRINGS = {
   goToStore: { ar: 'اذهب للمتجر', en: 'Go to store' },
   langToggle: { ar: 'EN', en: 'ع' },
   questionOf: { ar: 'سؤال', en: 'Question' },
+  progressOf: { ar: 'من', en: 'of' },
+  narrowingTitle: { ar: 'نضيّق نتائجك', en: 'Narrowing your results' },
   retry: { ar: 'إعادة المحاولة', en: 'Retry' },
   cancel: { ar: 'إلغاء', en: 'Cancel' },
   save: { ar: 'حفظ', en: 'Save' },

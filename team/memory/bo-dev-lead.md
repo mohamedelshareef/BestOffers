@@ -375,6 +375,147 @@
   N8 QuotaPill + paywall interception + resume. Infra: theme/i18n/locale/secureStorage/session/accountsClient/
   config. `typedRoutes` DISABLED (router.d.ts hand-maintained — add route to the union when adding a screen).
 
+## FOOD SEARCH accuracy + speed fix (2026-06-26 — "rice returns random food" BUG, REAL-proven)
+- **Tests: 131/131 api (was 120; +8 `food-relevance.spec.ts`, +3 `food-resolver.spec.ts`).**
+- **ROOT CAUSE (accuracy):** a DISH query ("rice") matched NO Talabat restaurant slug → `TalabatAdapter.
+  discover` fell back to the first N restaurants → `FoodOfferResolver` returned their WHOLE menus
+  unfiltered (ranker only sorts by price, never by query relevance). REAL proof: "rice" fetched **564
+  dishes** (6 restaurants incl. burger-king/hardees/kfc) and dumped all of them.
+- **FIX — `offers/adapters/food-relevance.ts` (NEW, deterministic, shared):** `normalizeFoodText`
+  (lowercase + strip harakat/tatweel + أإآٱ→ا + ى→ي + ة→ه), `expandFoodQuery` (query tokens → AR+EN
+  SYNONYM_GROUPS; rice⇄biryani/مجبوس/برياني/رز/أرز/مندي/كبسه…; +burger/pizza/chicken/shawarma/kebab/fish/
+  pasta/coffee/dessert/breakfast/shrimp/fries groups), `scoreDish` (name hit 100 / category(menu-section)
+  50 / desc 15; whole-word > substring; strips "— Restaurant" suffix so a restaurant *named* Rice doesn't
+  pass a burger), `filterDishesByQuery(items,query,restaurantQuery)`. GRACEFUL FALLBACK (load-bearing): on
+  0 matches → `matchedGroup? [] : items` — a RECOGNIZED dish term that finds nothing returns empty (term
+  constrains), an UNRECOGNIZED free-form query keeps provider order (don't nuke "meal prep grill").
+- **Wiring:** `food-resolver.ts` now over-fetches (discover limit 3→6), computes `queryMatchedRestaurant`
+  (slug contains a query token ⇒ whole menu, e.g. "kfc"; else dish term ⇒ filter), and applies
+  `filterDishesByQuery` to the merged menus before synth-SKU. `social-resolver.ts` applies the SAME filter
+  for sector==='food' only (RE keeps its area-match in ranker; `matchedGroup` fallback protects free-form
+  IG food queries — fixed the 2 social-ingest tests it first broke).
+- **ACCURACY PROOF (REAL Talabat, LIVE_FETCH=on):** "rice" 564→**14-15 dishes**, ALL real rice/biryani
+  (Tikka Rice 0.750, White/Saffron Rice 1.100, Tawook Rice, Rice Bowls, Chicken Biryani 3.950) — ZERO
+  burgers/fries. "برياني" (AR) → same 15 incl. Chicken Biryani. End-to-end through booted API w/ REAL
+  Claude: 15 cards state=results, cheapest-first, Talabat KWD prices + deeplinks.
+- **ROOT CAUSE (speed):** `explainRanking` ran on ALL 15-280 dishes on OPUS, sequentially. FIX (2 knobs):
+  (1) `anthropic-claude-client.ts` explain uses `explainModel` = `CLAUDE_EXPLAIN_MODEL ?? claude-haiku-4-5`
+  (clarify stays on main model claude-opus-4-8; "why" is low-stakes, price/rank are CODE). (2) `search.
+  service.ts` `EXPLAIN_TOP_N` (env, default 8) caps explained cards via `ranked.slice(0,N)`; ranks beyond
+  N fall through to the existing truthful data-only "why". **SPEED PROOF (warm cache, REAL API, same
+  query):** BEFORE (Opus+explain-all) **19.4s** → AFTER (Haiku+top8) **9.5-9.8s** ≈ **51% faster** on the
+  Claude path. Remaining ~4s = live Talabat fetch of 6 menus (cached 5min, FOOD_TTL_MS) — decoupled.
+- **RUN CMD (real food search):** `cd apps/api && DOTENV_CONFIG_PATH=<repo>/.env CLAUDE_PROVIDER=anthropic
+  LIVE_FETCH=on BILLING_PROVIDER=mock SOCIAL_PROVIDER=mock SOCIAL_EXTRACTOR=mock PORT=3210 node -r
+  dotenv/config dist/main.js` then POST /search/intent {intentRaw:"rice",sector:"food",locale:"ar"}.
+  GOTCHA: Talabat /restaurants SSR is SLOW (~30s cold) — discovery timeout must be ≥15s for a cold cold-cache
+  manual probe (the resolver's FOOD_TIER_TIMEOUT http=4s is per-MENU-fetch, fine once slugs are cached).
+- **NEXT (food speed, deferred):** parallelize clarify+offer-resolve (clarify is skipped for food so minor);
+  pre-warm Talabat menu cache via scheduler; semantic-boost the relevance filter (currently lexical+synonym
+  only — enough for the demo). Synonym groups are a hand table — extend as cuisines grow.
+
+## PRECISION pass — tight, query-scoped matching across ALL categories (2026-06-26, REAL-proven)
+- **Tests: 148/148 api (was 131; +12 `realestate-relevance.spec.ts`, +5 `electronics-precision.spec.ts`).** tsc clean.
+- **GOAL (owner):** return ONLY what was asked, drop loosely-related; precision > breadth; never invent.
+- **REAL ESTATE — NEW strict area filter `offers/adapters/realestate-relevance.ts`** (mirrors food-relevance):
+  `AREA_GROUPS` (canon→AR+EN aliases: salmiya/السالمية, salwa/السالوة, mahboula, hawally, jabriya, mangaf,
+  +fintas/fahaheel/jahra/farwaniya/sharq/bneid), `normalizeAreaText`, `detectQueryAreas` (substring so
+  AR-glued "بالسالمية" matches), `detectOfferArea`, `filterFlatsByQuery`. Query names an area → keep ONLY
+  that area (exact-area first) + "nearby/قريب"-tagged flats; DROP unrelated areas; asked-area-empty → []
+  (honest empty, NOT random). No area named → keep provider order (don't nuke free-form). Wired in
+  `social-resolver.ts` for sector==='realestate' (uses `intent.model`+category raw text; reads
+  `sku.attributes.area`). RE flats come ONLY from social mock lane (offline). **REAL PROOF (booted API
+  :3215, mock claude/social):** "شقة في السالمية"→1 (Salmiya only), "بالجابرية"→1, "flat in Salwa"→3 (all
+  3 Salwa, no others), "الفنطاس"→state=empty (0, no random), "شقة مفروشة للايجار" (no area)→all 8 kept.
+- **ELECTRONICS — exact-model precision in `fallback.ts`.** `isExactMatch` no longer uses `model.includes`
+  (substring) — NEW `modelIsExactlyAsked(skuModel, askedModel)`: SKU model must START with all asked
+  tokens AND any extra token must be a storage/color qualifier, NOT a model word (`pro/max/plus/ultra/
+  mini/se/air/fe/lite/note`) or a bare generation number. So "iPhone 16" is NOT exact for "iPhone 16 Pro
+  Max"/"iPhone 16 Plus"; Pro Max becomes an `alternative` (isAdjacent), never mislabeled exact. matchSkus
+  still substring-gathers candidates (no-results bug fix preserved) — only CLASSIFICATION tightened.
+  **REAL PROOF:** booted :3215 (offline) "iPhone 17 Pro"→11 cards: only true 17 Pro tagged `exact`, every
+  17 Pro Max `alternative`. booted :3216 (LIVE_FETCH=on) "iPhone 16"→4 cards ALL real iPhone 16 (128 Blk/
+  Ultra/White, 512 Blk) from X-cite live, ZERO Pro Max / ZERO 17, fallbackServed=false (4≥N).
+- **FOOD — already applied to BOTH lanes (confirmed):** `filterDishesByQuery` in `food-resolver.ts`
+  (Talabat) AND `social-resolver.ts` (IG food, sector==='food'). REAL PROOF (booted :3216 LIVE): "rice"→
+  15 cards, ALL rice/biryani (Tikka/White/Saffron Rice, Rice Bowls, Chicken/Lamb Biryani 0.750–5.850 KWD)
+  + 1 IG meal-prep box whose caption literally has "رز" (legit synonym hit) — ZERO burgers/fries.
+- **PROMPTS tightened (precision, no behavior change to mock path):** clarify system (`anthropic-claude-
+  client.ts`) — questions MUST narrow the SAME requested item, never drift to a different model/accessory/
+  inapplicable attribute, preserve exact model, skip low-value padding. explainRanking system — "why" MUST
+  cite the actual asked attribute, no unrelated praise/marketing/emoji; fewer true words > padding.
+  social extraction system (`anthropic-social-extractor.ts`) — extract ONLY literally-present fields,
+  unstated→null, no inference; isOffer=false for memes/non-offers (droppable). Truthfulness guards (code)
+  unchanged: `priceLiterallyInCaption`, `priceTokenInSource`, `verifyCitation`.
+- **TEST DRIVERS (durable):** electronics clarifier must be SKIPPED to terminal (mock-claude asks storage)
+  — POST /search/answer {dimension, answer:'__skip__'} loop (`/tmp/elec-driver.mjs`). Food/RE skip
+  clarifiers (discovery sectors). iPhone 16 has NO offline mock offers (live-only) → assert electronics
+  precision offline on iPhone 17 Pro vs 17 Pro Max (both have MOCK_OFFERS); iPhone 16 needs LIVE_FETCH=on.
+- **RUN CMD:** `cd apps/api && DOTENV_CONFIG_PATH=<repo>/.env CLAUDE_PROVIDER=mock LIVE_FETCH=on|off
+  BILLING_PROVIDER=mock SOCIAL_PROVIDER=mock SOCIAL_EXTRACTOR=mock PORT=32xx node -r dotenv/config
+  dist/main.js` (build first). RE/electronics-offline use off; food/iPhone16 use on. Did NOT touch PO :3000.
+
+## ≥5 CLARIFIER GATE — per-sector, config-driven, server-authoritative (2026-06-26, REAL-proven)
+- **Tests: 156/156 api (was 148; +8) · 22/22 mobile · tsc clean (both).** OWNER DIRECTIVE (PO-ratified):
+  irrespective of sector ask AT LEAST 5 clarifiers BEFORE search. **SUPERSEDES** the old ≤3 cap
+  (`MAX_CLARIFIER_QUESTIONS=3`) AND the "food/realestate = no-clarifier discovery" rule (D-V2-1 #2).
+- **CONFIG MODULE `apps/api/src/search/clarifier-sets.ts` (NEW, the source of truth):** `CLARIFIER_SETS:
+  Record<Sector, ClarifierDimension[]>` from BA spec §1–4. Each sector lists dims BROAD→NARROW; first 5
+  = mandatory floor, rest = optional Q6–Q8 used only to top up to 5 when intent pre-resolves some.
+  Electronics={model,storage,color,budget,condition,+brand,mustHave}; Food={dish,people,budget,delivery,
+  dietary,+spice,sides}; RealEstate={tenure,area,bedrooms,budget,furnished,+amenities,tenant}. Each dim
+  carries `preResolved(ctx)` predicate (RULE-7: counts toward 5, never re-asked). `MIN_CLARIFIER_QUESTIONS
+  =5`. **Adding a sector = add a key with ≥5 dims (§4 template), NO loop code change.** `toQuestion()`
+  strips the predicate before sending to client.
+- **search.service.ts rewrite (the gate is CODE, not the model):** `advance(session)` is now config-driven
+  — presents the NEXT unresolved dim until `presentedCount>=5`, then `runSearch`. `presentedCount` = Set
+  union of pre-resolved + askedDimensions. `nextDimension` skips pre-resolved + already-asked.
+  `markPreResolved()` (called in startIntent) stamps pre-resolved dims into answers as `__prefilled__`.
+  Claude `clarify` is now called ONCE (startIntent) ONLY for intent normalization — the per-ANSWER Claude
+  round-trip is GONE (faster + deterministic). `MAX_CLARIFIER_QUESTIONS` kept as alias = MIN (5) for the
+  old import in specs. **applyAnswer**: discovery answers (food `dish`, RE `area`) FOLD into `intent.model`
+  (the term `filterDishesByQuery`/`filterFlatsByQuery` drive off) so a chip answer TIGHTENS results
+  (RULE-3/5); all answers also stay in constraints. budget chip → budgetFils (hard filter).
+- **SearchResponse += `totalQuestions`** (shared/domain.ts) = the "of N" denominator (Math.max(5,
+  preResolvedCount)). `clarifierCount` now = PRESENTED count (the "N"). Set on clarifying + results + empty.
+- **RULE-8 (clarifier ≠ free search) preserved:** quota.tryConsume is in runSearch (after the floor); every
+  clarifier turn returns from advance BEFORE runSearch → 0 quota burn. Proven: ≥5 turns → tryConsume called
+  EXACTLY once. RULE-10 (fast model): `CLAUDE_CLARIFY_MODEL ?? claude-haiku-4-5` for the clarify call
+  (anthropic-claude-client.ts; was Opus). explainModel already Haiku.
+- **TESTS:** NEW `clarifier-gate.spec.ts` (≥5 no-dispatch per sector via resolveOffers spy; skip-all-still-
+  searches per sector; RULE-8 tryConsume-once). REWROTE `clarifier-bound.spec.ts` (≥5 per sector + RULE-7
+  fully-specified→only `condition` asked, shows 5 of 5). Updated `search-resilience.spec.ts` (food now asks
+  ≥5; the old "food→0 clarifiers" test INVERTED to "food asks ≥5"). `truthfulness.spec.ts` + resilience use
+  NEW `clarifier-test-util.ts skipToTerminal(svc,res,pseudo)` helper to drive past the gate.
+- **REAL PROOF (booted API :3290, CLAUDE_PROVIDER=mock LIVE_FETCH=on):** all 3 sectors present EXACTLY 5
+  before search: electronics "iPhone 16" (model pre-resolved → storage/color/budget/condition asked) → 4
+  real iPhone cards; food "rice" (dish pre-resolved → people/budget/delivery/dietary) → 13 real rice/biryani
+  dishes; RE "شقة في السالمية" (area pre-resolved → tenure/bedrooms/budget/furnished) → Salmiya flat.
+  ANSWER-TIGHTENS proven: RE budget chip 250→0 cards, 400→1 card (300KWD Salmiya flat passes). SKIP-ALL
+  still searches (never dead-ends). Driver `/tmp/clarifier-flow-driver.mjs`.
+- **FRONTEND (render-proven, real iPhone 17 Pro sim):** `ClarifierQuestion.tsx` += "N of 5 / ٣ من ٥"
+  progress PILL (brand-teal, Western digits) + segmented dot bar (filled = presented). i18n += `progressOf`
+  (من/of), `narrowingTitle`. search.tsx passes `total={response.totalQuestions ?? 5}`. Shots:
+  `team/qa/sim/clarifier-elec-ar.png` (Q "2 من 5", storage chips), `clarifier-elec-q5.png` (full intent →
+  "5 من 5", dot bar FULL, only `condition` asked = RULE-7 proof), `clarifier-food-q2.png` (food "لكم شخص؟").
+  **BIDI GOTCHA (durable):** "N من total" — "من" is strong-RTL; in an RTL row it lays out with N on the
+  trailing edge → reads correctly R-to-L. `direction:'ltr'` on the pill + LTR-isolate (U+2066/2069) did NOT
+  override RN-web's RTL row cascade; a single `<Text>` run in the locale's natural direction renders right.
+- **RUN CMD (this verify, isolated — did NOT touch PO :3000):** API `cd apps/api && DOTENV_CONFIG_PATH=
+  <repo>/.env CLAUDE_PROVIDER=mock LIVE_FETCH=on BILLING_PROVIDER=mock SOCIAL_PROVIDER=mock
+  SOCIAL_EXTRACTOR=mock PORT=3290 node -r dotenv/config dist/main.js`. Web export app.json extra.apiBaseUrl
+  →:3290, `npx expo export --platform web -o /tmp/bo-dist-3290`, RESTORE app.json, sed-patch baked
+  localhost:3000→3290 in `_expo/static/js/web/*.js`, serve `node /tmp/spa-server.mjs /tmp/bo-dist-3290 8790`,
+  `xcrun simctl openurl booted http://localhost:8790/search?cat=<sector>&q=<intent>`.
+- **DEFERRED:** real-Claude (CLAUDE_PROVIDER=anthropic) intent normalization for new dims (condition/people/
+  delivery/dietary/tenure/bedrooms/furnished) not yet pre-resolved from free-text — mock-claude only extracts
+  model/storage/color/budget/area-via-raw, so those new dims are always ASKED (correct, just not pre-filled
+  from a rich free-text). The §4 `preResolved` predicates are wired; extend mock+real Claude extraction to
+  populate constraints.{condition,people,…} to pre-resolve more. ranker does not yet hard-rank by the new
+  food/RE dims (dietary/furnished/bedrooms) beyond budget+area+dish — currently they sit in constraints +
+  the dish/area fold; deeper relevance use is a follow-up. KPI instrumentation (clarifier completion rate,
+  phase duration, skip rate) per §6 not added.
+
 ## Env / tooling gotchas (durable)
 - **Node 25 is installed locally** (>node 20). better-sqlite3 prebuilt works; migrate+seed OK.
 - **Expo Web needs `react-native-web` + `react-dom`** (now in mobile deps). `expo export --platform web`

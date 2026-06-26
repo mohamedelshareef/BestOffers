@@ -234,6 +234,7 @@ export default function SearchScreen() {
           question={response.questions[0]}
           locale={lc}
           index={response.clarifierCount}
+          total={response.totalQuestions ?? 5}
           onAnswer={answer}
         />
       )}

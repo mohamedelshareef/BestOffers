@@ -21,9 +21,28 @@ import { TruthfulnessViolationError, verifyCitation } from './truthfulness';
 import { EventsService } from '../events/events.service';
 import { QuotaService } from '../quota/quota.service';
 import { PaywallException } from './paywall.exception';
+import {
+  CLARIFIER_SETS,
+  ClarifierDimension,
+  MIN_CLARIFIER_QUESTIONS,
+  PreResolveContext,
+  toQuestion,
+} from './clarifier-sets';
 
-/** HARD bound on clarifier questions — enforced in CODE, not just the prompt (AC C2.1). */
-export const MAX_CLARIFIER_QUESTIONS = 3;
+/**
+ * Server-authoritative ≥5 clarifier floor (OWNER DIRECTIVE 2026-06-26, PO-ratified): irrespective of
+ * sector, search does NOT dispatch to providers until at least this many distinct dimensions have been
+ * PRESENTED (answered or skipped). This SUPERSEDES the prior ≤3 cap + the "food/realestate = no
+ * clarifiers" discovery rule. The question SETS are config-driven per sector (`clarifier-sets.ts`).
+ */
+export const MAX_CLARIFIER_QUESTIONS = MIN_CLARIFIER_QUESTIONS;
+
+/**
+ * SPEED: cap how many ranked offers get a model-authored "why". Food queries can return dozens-to-
+ * hundreds of dishes; explaining all of them is the dominant latency cost. The top N (the cards the
+ * user actually reads) get a Claude "why"; the rest fall through to the truthful data-only why line.
+ */
+export const EXPLAIN_TOP_N = Number(process.env.EXPLAIN_TOP_N ?? 8);
 
 @Injectable()
 export class SearchService {
@@ -53,6 +72,10 @@ export class SearchService {
       intentNormalized: clar.intentNormalized,
     });
 
+    // RULE-7: dimensions the user already stated in free-text intent are PRE-RESOLVED and count toward
+    // the ≥5 without being re-asked. Mark them now so the gate doesn't interrogate what's already known.
+    this.markPreResolved(session);
+
     // No PII: only normalized category + pseudoId are logged (S1-4 privacy wall).
     this.events.log({
       type: 'intent_submitted',
@@ -61,7 +84,7 @@ export class SearchService {
       payload: { sector: req.sector, category: clar.intentNormalized.category ?? 'unknown' },
     });
 
-    return this.advance(session, clar.needClarification ? clar.question : undefined);
+    return this.advance(session);
   }
 
   /** POST /search/answer — records an answer, runs the next step (clarify again or search). */
@@ -83,54 +106,78 @@ export class SearchService {
       payload: { dimension: req.dimension, skipped: answer == null },
     });
 
-    // ask Claude for the next step, but the CODE owns the bound + the never-re-ask guard.
-    const clar = await this.claude.clarify({
-      intentRaw: session.intentRaw,
-      sector: session.sector,
-      locale: session.locale,
-      askedDimensions: session.askedDimensions,
-    });
-    session.intentNormalized = clar.intentNormalized
-      ? { ...clar.intentNormalized, constraints: { ...clar.intentNormalized.constraints, ...session.intentNormalized.constraints } }
-      : session.intentNormalized;
-
-    const nextQuestion = clar.needClarification ? clar.question : undefined;
-    return this.advance(session, nextQuestion);
+    // The CODE owns the ≥5 gate + which dimension comes next (config-driven), NOT the model. We no
+    // longer round-trip Claude per answer — the per-sector set in `clarifier-sets.ts` is authoritative,
+    // which also keeps the clarifier phase fast (no extra model call between chips).
+    return this.advance(session);
   }
 
   /**
-   * Decide: ask another question, or run the search.
-   * The bound (≤3) and never-re-ask are GUARANTEED here regardless of what the model asks for.
+   * SERVER-AUTHORITATIVE ≥5 GATE (RULE-1). Present the NEXT unresolved dimension from this sector's
+   * config set, or — once ≥5 distinct dimensions have been PRESENTED (asked or pre-resolved) — run the
+   * search. Skipping widens an axis but still counts toward the 5 and never short-circuits (RULE-4).
    */
-  private async advance(
-    session: SearchSession,
-    proposedQuestion?: { dimension: string; textAr: string; textEn: string; chips: any[] },
-  ): Promise<SearchResponse> {
-    // DISCOVERY SECTORS (food, realestate) go straight to results — code-enforced, NOT prompt-trusted.
-    // Each dish/flat IS its own result (no canonical SKU to disambiguate by storage/color/budget), so
-    // the electronics clarifier dimensions don't apply. Mock-claude already returns needClarification=
-    // false for these; the REAL Claude does NOT reliably honor that and asked storage/color for "kfc"
-    // (D-V2-1 root cause #2). Suppressing here makes the behavior deterministic across both providers.
-    const isDiscoverySector = session.sector === 'food' || session.sector === 'realestate';
-    const canAskMore = !isDiscoverySector && session.clarifierCount < MAX_CLARIFIER_QUESTIONS;
-    const notAlreadyAsked =
-      !!proposedQuestion && !session.askedDimensions.includes(proposedQuestion.dimension);
+  private async advance(session: SearchSession): Promise<SearchResponse> {
+    const dims = CLARIFIER_SETS[session.sector] ?? [];
+    const presented = this.presentedCount(session); // pre-resolved + already-asked (RULE-7 + RULE-4)
+    const total = Math.max(MIN_CLARIFIER_QUESTIONS, this.preResolvedDimensions(session).length);
 
-    if (proposedQuestion && canAskMore && notAlreadyAsked) {
-      session.askedDimensions.push(proposedQuestion.dimension);
-      session.clarifierCount += 1;
-      session.status = 'clarifying';
-      this.sessions.save(session);
-      return {
-        searchSessionId: session.id,
-        state: 'clarifying',
-        questions: [proposedQuestion],
-        clarifierCount: session.clarifierCount,
-      };
+    // Search ONLY dispatches once the floor is met (RULE-1). Until then, present the next dimension
+    // that is neither pre-resolved nor already asked.
+    if (presented < MIN_CLARIFIER_QUESTIONS) {
+      const next = this.nextDimension(session, dims);
+      if (next) {
+        session.askedDimensions.push(next.dimension);
+        // "N of total" counts PRESENTED dimensions (asked + pre-resolved) so a fully-specified intent
+        // that pre-resolved 4 shows "5 of 5" on its single asked question.
+        session.clarifierCount = this.presentedCount(session);
+        session.status = 'clarifying';
+        this.sessions.save(session);
+        return {
+          searchSessionId: session.id,
+          state: 'clarifying',
+          questions: [toQuestion(next)],
+          clarifierCount: session.clarifierCount,
+          totalQuestions: total,
+        };
+      }
+      // No more configured dimensions to present but floor not reached (sector set < 5 — config error
+      // we don't want to dead-loop on): fall through to search rather than hang.
     }
 
-    // proceed to search (bound reached, model satisfied, or it tried to re-ask a dimension)
+    // Floor met (or no more questions available) → dispatch to providers (RULE-4: skip-all still searches).
     return this.runSearch(session);
+  }
+
+  /** Distinct dimensions PRESENTED to the user: pre-resolved from intent + explicitly asked (RULE-7). */
+  private presentedCount(session: SearchSession): number {
+    const pre = this.preResolvedDimensions(session);
+    const set = new Set([...pre, ...session.askedDimensions]);
+    return set.size;
+  }
+
+  /** The next config dimension to ask: not pre-resolved, not already asked, in broad→narrow order. */
+  private nextDimension(session: SearchSession, dims: ClarifierDimension[]): ClarifierDimension | undefined {
+    const pre = new Set(this.preResolvedDimensions(session));
+    return dims.find((d) => !pre.has(d.dimension) && !session.askedDimensions.includes(d.dimension));
+  }
+
+  /** Dimensions the user's free-text intent already resolved (RULE-7) — counted, never re-asked. */
+  private preResolvedDimensions(session: SearchSession): string[] {
+    const dims = CLARIFIER_SETS[session.sector] ?? [];
+    const ctx: PreResolveContext = {
+      raw: (session.intentRaw ?? '').toLowerCase(),
+      constraints: session.intentNormalized.constraints,
+      model: session.intentNormalized.model,
+    };
+    return dims.filter((d) => d.preResolved(ctx)).map((d) => d.dimension);
+  }
+
+  /** Stamp pre-resolved dimensions into `answers` (as recorded, not skipped) so they count + feed filters. */
+  private markPreResolved(session: SearchSession): void {
+    for (const dim of this.preResolvedDimensions(session)) {
+      if (!(dim in session.answers)) session.answers[dim] = '__prefilled__';
+    }
   }
 
   private async runSearch(session: SearchSession): Promise<SearchResponse> {
@@ -188,6 +235,7 @@ export class SearchService {
         state: 'empty',
         cards: [],
         clarifierCount: session.clarifierCount,
+        totalQuestions: Math.max(MIN_CLARIFIER_QUESTIONS, this.preResolvedDimensions(session).length),
         assumptions: this.assumptionsFrom(session),
         broadenSuggestions: broaden, // AC-14: ≥1 actionable control
       };
@@ -263,6 +311,7 @@ export class SearchService {
       state: 'results',
       cards,
       clarifierCount: session.clarifierCount,
+      totalQuestions: Math.max(MIN_CLARIFIER_QUESTIONS, this.preResolvedDimensions(session).length),
       assumptions: this.assumptionsFrom(session),
       fallbackServed: fallback.triggered || undefined,
     };
@@ -284,12 +333,17 @@ export class SearchService {
     // has a truthful data-only "why" fallback below. So we degrade to empty explanations instead of
     // letting explainRanking throw out of runSearch (which previously 500'd the whole food result and
     // surfaced as "0 cards" — D-V2-1). Truthful by construction: a missing explanation → data-only why.
+    // SPEED: only the TOP cards get a model-authored "why" — the rest fall through to the truthful
+    // data-only "why" path below. On a food query that can return 50–280 dishes, asking Claude to
+    // explain every one was the dominant latency cost (a multi-KB tool payload + long completion).
+    // The user reads the top results; ranks beyond EXPLAIN_TOP_N keep the data-only price/provider line.
+    const toExplain = ranked.slice(0, EXPLAIN_TOP_N);
     let explanations: Awaited<ReturnType<typeof this.claude.explainRanking>> = [];
     try {
       explanations = await this.claude.explainRanking({
         intentNormalized: session.intentNormalized,
         locale: session.locale,
-        rankedOffers: ranked.map((r) => ({ offer: r.offer, sku: r.sku })),
+        rankedOffers: toExplain.map((r) => ({ offer: r.offer, sku: r.sku })),
       });
     } catch {
       explanations = []; // never-block: cards fall through to the data-only "why" path below.
@@ -381,8 +435,25 @@ export class SearchService {
     if (dimension === 'budget') {
       const kwd = parseInt(answer, 10);
       if (!Number.isNaN(kwd)) c.budgetFils = kwd * 1000;
-    } else {
-      c[dimension] = answer;
+      return;
+    }
+    // Always keep the raw answer in constraints (structured query — RULE-3) so the relevance filter +
+    // ranker + matchesPreferences can read every answered dimension.
+    c[dimension] = answer;
+
+    // DISCOVERY SECTORS: the relevance filter (filterDishesByQuery / filterFlatsByQuery) drives off
+    // `intent.model` (the discovery term). Fold a `dish`/`area` answer into the model text so a chip
+    // answer measurably TIGHTENS the result set (RULE-3/5), not just sits in constraints. Skipping an
+    // axis (answer null) never reaches here, so a skip leaves the term unchanged = widened (RULE-4).
+    const foldsIntoQuery =
+      (session.sector === 'food' && dimension === 'dish') ||
+      (session.sector === 'realestate' && dimension === 'area');
+    if (foldsIntoQuery && answer && answer !== '__skip__') {
+      const base = (session.intentNormalized.model ?? session.intentRaw ?? '').trim();
+      // append the chip term if it isn't already in the query (avoid "rice rice")
+      if (!base.toLowerCase().includes(answer.toLowerCase())) {
+        session.intentNormalized.model = `${base} ${answer}`.trim();
+      }
     }
   }
 

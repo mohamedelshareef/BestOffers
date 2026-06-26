@@ -7,6 +7,8 @@ import {
   ProviderAdapter,
 } from '../provider-adapter.interface';
 import { OfferCache, SOCIAL_TTL_MS } from '../offer-cache';
+import { filterDishesByQuery } from '../food-relevance';
+import { filterFlatsByQuery } from '../realestate-relevance';
 
 /**
  * SocialOfferResolver (ADR-006 Phase-1) — runs the social-tier adapters (Instagram, per vertical) and
@@ -34,8 +36,34 @@ export class SocialOfferResolver {
         .map((a) => this.resolveOne(a, queryText)),
     );
 
-    const out: ResolvedOffer[] = [];
+    let out: ResolvedOffer[] = [];
     for (const r of settled) if (r.status === 'fulfilled') out.push(...r.value);
+
+    // FOOD relevance (bug fix): an IG food query like "rice" must surface only matching meal posts, not
+    // every restaurant post. Filter/rank by the dish term (AR+EN synonyms). Real-estate keeps its own
+    // area-matching (handled in the ranker); a generic-category query (model==category) is not filtered.
+    if (sector === 'food' && queryText && queryText !== 'food') {
+      const ranked = filterDishesByQuery(
+        out.map((o) => ({ ...o, title: o.sku.canonicalName, category: o.sku.attributes.category })),
+        queryText,
+        false,
+      );
+      out = ranked.map(({ title: _t, category: _c, ...rest }) => rest as ResolvedOffer);
+    }
+
+    // REAL ESTATE relevance (OWNER DIRECTIVE — precision per category): when the query names a SPECIFIC
+    // area (AR/EN aliases: السالمية/Salmiya, السالوة/Salwa, الجابرية/Jabriya…), keep ONLY flats in that
+    // area (exact-area first; "nearby/قريب"-tagged flats allowed). A flat in a different area is DROPPED.
+    // A query with no recognizable area keeps provider order. The full intent.model is used (it carries
+    // the user's free text e.g. "شقة في السالمية") so AR-glued forms like "بالسالمية" still match.
+    if (sector === 'realestate') {
+      const queryRaw = `${intent.model ?? ''} ${intent.category ?? ''}`.trim();
+      const filtered = filterFlatsByQuery(
+        out.map((o) => ({ ...o, area: o.sku.attributes.area, text: o.sku.canonicalName })),
+        queryRaw,
+      );
+      out = filtered.map(({ area: _a, text: _x, ...rest }) => rest as ResolvedOffer);
+    }
     return out;
   }
 

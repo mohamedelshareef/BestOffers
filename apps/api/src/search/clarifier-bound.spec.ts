@@ -1,6 +1,7 @@
 import { Test } from '@nestjs/testing';
 import { IntentRequest, AnswerRequest } from '@bestoffers/shared';
-import { SearchService, MAX_CLARIFIER_QUESTIONS } from './search.service';
+import { SearchService } from './search.service';
+import { MIN_CLARIFIER_QUESTIONS } from './clarifier-sets';
 import { SessionStore } from './session.store';
 import { OffersService } from '../offers/offers.service';
 import { EventsService } from '../events/events.service';
@@ -13,22 +14,20 @@ import { QuotaService } from '../quota/quota.service';
 const quotaStub = { tryConsume: jest.fn(), status: jest.fn() } as unknown as QuotaService;
 
 /**
- * AC C2.1 / C2.6 — clarifier loop is bounded to ≤3 and never re-asks a dimension,
- * ENFORCED IN CODE. We prove the bound holds even against an adversarial client that
- * always wants to ask another (new and repeated) question.
+ * ≥5 CLARIFIER GATE (OWNER DIRECTIVE 2026-06-26, PO-ratified; SUPERSEDES the prior ≤3 cap).
+ * Every sector presents AT LEAST 5 distinct dimensions before search dispatches. The question SET is
+ * CONFIG-DRIVEN (clarifier-sets.ts), so the SearchService — not the model — owns which dimension is
+ * asked next, the ≥5 floor, the never-re-ask guard, and the skip-still-searches behavior.
  */
 
 class AdversarialClient implements ClaudeClient {
-  // always demands a clarifier, cycling dimensions then repeating to test the re-ask guard.
-  private dims = ['storage', 'color', 'budget', 'storage', 'color'];
-  private i = 0;
+  // The model can no longer drive the clarifier loop — it only normalizes intent. We assert the CODE
+  // gate is authoritative even when the model wants to ask its own (irrelevant) questions.
   async clarify() {
-    const dim = this.dims[this.i % this.dims.length];
-    this.i += 1;
     return {
       intentNormalized: { constraints: {} },
       needClarification: true,
-      question: { dimension: dim, textAr: '؟', textEn: '?', chips: [] },
+      question: { dimension: 'storage', textAr: '؟', textEn: '?', chips: [] },
     };
   }
   async explainRanking() {
@@ -50,55 +49,53 @@ async function buildService(client: ClaudeClient) {
   return moduleRef.get(SearchService);
 }
 
-describe('clarifier bound (AC C2.1, C2.6)', () => {
-  it('asks at most 3 questions even when the model always wants more', async () => {
-    const svc = await buildService(new AdversarialClient());
-    const req: IntentRequest = { sector: 'electronics', locale: 'en', intentRaw: 'a phone' };
+describe('≥5 clarifier gate (OWNER DIRECTIVE — config-driven, server-authoritative)', () => {
+  for (const sector of ['electronics', 'food', 'realestate'] as const) {
+    it(`${sector}: presents ≥5 distinct dimensions before search, never re-asking one`, async () => {
+      const svc = await buildService(new AdversarialClient());
+      const req: IntentRequest = { sector, locale: 'en', intentRaw: 'something' };
 
-    let res = await svc.startIntent(req, 'p1');
-    let answered = 0;
-    // keep answering as long as we're asked
-    while (res.state === 'clarifying') {
-      expect(res.clarifierCount).toBeLessThanOrEqual(MAX_CLARIFIER_QUESTIONS);
-      const dimension = res.questions![0].dimension;
-      const ans: AnswerRequest = { searchSessionId: res.searchSessionId, dimension, answer: '__skip__' };
-      res = await svc.submitAnswer(ans, 'p1');
-      answered += 1;
-      if (answered > 10) throw new Error('loop did not terminate — bound not enforced');
-    }
+      let res = await svc.startIntent(req, `p-${sector}`);
+      const askedDims: string[] = [];
+      let presented = 0;
+      let steps = 0;
+      while (res.state === 'clarifying') {
+        if (steps++ > 12) throw new Error('loop did not terminate — gate not enforced');
+        // totalQuestions is the "of N" denominator and must be ≥5 every step.
+        expect(res.totalQuestions).toBeGreaterThanOrEqual(MIN_CLARIFIER_QUESTIONS);
+        const dim = res.questions![0].dimension;
+        expect(askedDims).not.toContain(dim); // RULE-2 / never-re-ask
+        askedDims.push(dim);
+        presented = res.clarifierCount;
+        const ans: AnswerRequest = { searchSessionId: res.searchSessionId, dimension: dim, answer: '__skip__' };
+        res = await svc.submitAnswer(ans, `p-${sector}`);
+      }
 
-    expect(res.clarifierCount).toBeLessThanOrEqual(MAX_CLARIFIER_QUESTIONS);
-    expect(['results', 'empty']).toContain(res.state);
-  });
+      // RULE-1: ≥5 dimensions were PRESENTED before reaching a terminal state.
+      expect(presented).toBeGreaterThanOrEqual(MIN_CLARIFIER_QUESTIONS);
+      // RULE-4: skipping every question STILL runs the search — never a dead end.
+      expect(['results', 'empty']).toContain(res.state);
+    });
+  }
 
-  it('never re-asks the same dimension (guard against repeats)', async () => {
-    const svc = await buildService(new AdversarialClient());
-    const req: IntentRequest = { sector: 'electronics', locale: 'en', intentRaw: 'a phone' };
-
-    const asked: string[] = [];
-    let res = await svc.startIntent(req, 'p2');
-    while (res.state === 'clarifying') {
-      const dim = res.questions![0].dimension;
-      expect(asked).not.toContain(dim); // never repeated
-      asked.push(dim);
-      res = await svc.submitAnswer(
-        { searchSessionId: res.searchSessionId, dimension: dim, answer: '__skip__' },
-        'p2',
-      );
-    }
-    expect(asked.length).toBeLessThanOrEqual(MAX_CLARIFIER_QUESTIONS);
-  });
-
-  it('skips clarifiers entirely when intent is fully specific (AC C2.4)', async () => {
+  it('RULE-7: a fully-specified electronics intent still reaches ≥5 (pre-resolved dims count, no re-ask)', async () => {
     const svc = await buildService(new MockClaudeClient());
-    // storage + color present, no budget probe needed because budget is the last optional dim
+    // model + storage + color + budget are stated → 4 pre-resolved; only `condition` is asked to reach 5.
     const req: IntentRequest = {
       sector: 'electronics',
       locale: 'en',
       intentRaw: 'iPhone 17 Pro Max 256GB black under 500 KWD',
     };
-    const res = await svc.startIntent(req, 'p3');
-    expect(res.state).toBe('results');
-    expect(res.clarifierCount).toBe(0);
+    let res = await svc.startIntent(req, 'p3');
+    expect(res.state).toBe('clarifying'); // NOT 0 clarifiers anymore
+    // exactly one NEW question (condition); never re-asks model/storage/color/budget.
+    expect(res.questions![0].dimension).toBe('condition');
+    expect(res.clarifierCount).toBe(5); // 4 pre-resolved + this 1 presented = 5 of 5
+    expect(res.totalQuestions).toBe(5);
+    res = await svc.submitAnswer(
+      { searchSessionId: res.searchSessionId, dimension: 'condition', answer: 'new' },
+      'p3',
+    );
+    expect(res.state).toBe('results'); // floor met → search runs
   });
 });

@@ -43,7 +43,13 @@ export class AnthropicSocialExtractor implements SocialExtractor {
       'caption (e.g. "420 د.ك", "12.500 KWD", "75 د.ك"). If the caption says "السعر بالخاص", "DM for ' +
       'price", "price on request", or has no number, the price field MUST be null. NEVER invent or ' +
       'estimate a price. Prices are in Kuwaiti Dinar; return them as integer fils (1 KWD = 1000 fils, ' +
-      'e.g. 420 KWD → 420000, 12.500 KWD → 12500). Set isOffer=false for memes/reposts/non-offers. ' +
+      'e.g. 420 KWD → 420000, 12.500 KWD → 12500). ' +
+      // PRECISION (owner directive): extract ONLY fields LITERALLY present in this caption — never infer
+      // an area, room count, restaurant, or attribute that is not actually written. Leave any field the
+      // caption does not state as null. Be tightly scoped: do not guess. Set isOffer=false for memes /
+      // reposts / announcements / non-commercial posts / posts with no concrete item, so they are dropped.
+      'Extract ONLY what is literally written; set any unstated field to null; do NOT infer or pad. ' +
+      'Set isOffer=false for memes/reposts/non-offers. ' +
       'Always call the tool.';
 
     const res = await client.messages.create({

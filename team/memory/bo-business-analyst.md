@@ -12,9 +12,19 @@
   - `team/analysis/feature-acceptance-criteria.md` — full build-ready AC for F-A1/A2/A3, F-B1, F-C1, F-D1, F-D2 + 9-metric conversion-funnel KPIs + 16 open-PO questions.
 - Smart no-match fallback delivered (2026-06-26):
   - `team/analysis/no-match-fallback-ac.md` — F-SR1, 20 AC + AR/EN UX copy + 7 KPIs + 7 open-PO questions. Handoff to bo-dev-lead + bo-ux-lead.
+- ≥5 per-sector clarifier sets delivered (2026-06-26):
+  - `team/analysis/clarifier-question-sets.md` — Electronics/Food/Real-estate flows + general template; AR-first/EN + chips + skip per Q; 10 testable RULES; UX trade-off + 4 new KPIs; 9 open-PO Qs. Handoff to bo-dev-lead + bo-ux-lead.
+
+## Clarifier rule (durable — OVERRIDES prior ≤3 cap)
+- **NEW OWNER DIRECTIVE 2026-06-26:** every sector asks **≥5** clarifying questions BEFORE provider search. Supersedes the old `0–3` cap AND the "food/real-estate = no clarifiers (discovery)" rule.
+- Per question: AR-first/RTL + EN mirror, Western 0-9 numerals, chips + free-text fallback, explicit Skip (skip widens the axis, never reduces the ≥5 count or short-circuits to search).
+- Mandatory-5 floors (recommended, pending PO): Electronics={model,storage,color,budget,condition}; Food={dish,people,budget,delivery+area,dietary}; Real-estate={rent/buy,area,bedrooms,budget,furnished}. Optional Q6+ extension exists per sector.
+- RULE-7: dimensions pre-stated in free-text intent count toward the 5 (don't re-ask) — fast lane reconciling P2 "Saud" ≤3 persona conflict.
+- Clarifier turns DON'T increment the F-D2 free counter (counter = 1 only at provider-search-reached). Clarifier loop = fast model, target ≤60s median.
+- Obsolete: S0-4 "≤3 clarifier efficiency" KPI is retired/inverted → replaced by clarifier completion-rate, phase duration, skip rate/Q, relevance lift (pending PO ratify).
 
 ## MVP boundary (durable)
-- IN: mobile+OTP auth (biometric opt-in), sector pick (Electronics + Food), AR/EN RTL conversational intent, ≤3 clarifiers, provider search, ranked cards (image/why/price/provider/deep link), deep-link hand-off, light admin web (sources/moderation/analytics), day-one anonymized logging.
+- IN: mobile+OTP auth (biometric opt-in), sector pick (Electronics + Food), AR/EN RTL conversational intent, **≥5 clarifiers (was ≤3 — superseded 2026-06-26)**, provider search, ranked cards (image/why/price/provider/deep link), deep-link hand-off, light admin web (sources/moderation/analytics), day-one anonymized logging.
 - OUT (non-goals, locked): no payments/cart/checkout, no inventory/fulfilment, no marketplace, no sponsored ranking at MVP. Saved searches + price-drop alerts = FAST-FOLLOW not day-one. Furniture/Cars = roadmap.
 - Food gated on S0-2 provider-data feasibility. Electronics is the day-one demoable spine.
 
@@ -22,7 +32,7 @@
 - Activation: % new sign-ins completing ≥1 search w/ ≥1 result in first session.
 - Search-to-result rate: % intents reaching non-empty ranked set (empty-rate = inverse).
 - Time-to-result: median secs intent→cards (track p90).
-- Clarifier efficiency: avg clarifiers before successful search (target ≤3).
+- ~~Clarifier efficiency: avg clarifiers ≤3~~ RETIRED 2026-06-26 (≥5 directive). Replaced by: clarifier completion-rate, clarifier-phase duration (median/p90), skip-rate per question, relevance lift vs old ≤3 baseline.
 - Click-through (hand-off): % result sessions with ≥1 deep-link tap (primary monetization proxy).
 - Retention: D7/D30 return of activated users.
 - All KPIs from anonymized logs, no PII.

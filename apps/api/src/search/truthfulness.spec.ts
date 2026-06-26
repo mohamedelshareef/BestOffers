@@ -4,6 +4,7 @@ import { verifyCitation, TruthfulnessViolationError, citableAttributes } from '.
 import { RankExplanation, ClaudeClient, CLAUDE_CLIENT } from '../ai/claude-client.interface';
 import { MOCK_OFFERS, MOCK_SKUS } from '../offers/mock-offers.dataset';
 import { SearchService } from './search.service';
+import { skipToTerminal } from './clarifier-test-util';
 import { SessionStore } from './session.store';
 import { OffersService } from '../offers/offers.service';
 import { EventsService } from '../events/events.service';
@@ -97,7 +98,9 @@ describe('end-to-end: invented "why" never reaches a card (AC D3.3)', () => {
       locale: 'en',
       intentRaw: 'iPhone 17 Pro Max 256GB black under 500 KWD',
     };
-    const res = await svc.startIntent(req, 'pX');
+    // ≥5 gate (OWNER DIRECTIVE 2026-06-26): a fully-specified intent pre-resolves 4 dims; skip the
+    // remaining presented question(s) to reach results. The truthfulness assertion below is unchanged.
+    const res = await skipToTerminal(svc, await svc.startIntent(req, 'pX'), 'pX');
     expect(res.state).toBe('results');
 
     for (const card of res.cards!) {

@@ -2,13 +2,23 @@
 
 > READ at task start. UPDATE at end with durable facts only. Keep lean; prune stale.
 
-## Current state (2026-06-26 — v2 DEVICE QA, app NOW RENDERS on sim)
-- Report: `team/qa/qa-v2-device-report.md` (NEW). Prior: `qa-simulator-report.md`, `qa-frontend-report.md`.
+## Current state (2026-06-26 — FULL REAL-mode sim run for PO demo)
+- Report: `team/qa/sim/run-report.md` (NEW, 6 real shots `team/qa/sim/run-01..06`). Prior: `qa-v2-device-report.md`, `qa-simulator-report.md`.
+- **FULL REAL run (claude=anthropic, liveFetch=on, social=apify, extractor=anthropic; billing/otp=mock):**
+  - **Categories PASS** — NOW 3 active tiles Electronics+Food+**RealEstate(عقارات شقق)**, only Cars Soon. NOTE: served dist was STALE (old 2-active layout) — had to RE-EXPORT (`cd apps/mobile && npx expo export --platform web`). Always re-export before a demo.
+  - **Electronics PASS** — clarifier (MSA storage Q + chips), exact-rich query → ranked cards X-cite 219.900 / Blink 364.900 / Best Al-Yousifi, gold verdict ribbon, real deeplinks, src=live.
+  - **Food PASS — D-V2-1 RESOLVED** — "kfc" → 59 cards: 55 real Talabat dishes (real talabat.com/kuwait/kfc links) + 4 real IG offers. IG CTA pill "شوف على إنستقرام" RENDERS. Real permalinks @offer_food_kw/p/DZ2S4cCMAQd, @kuwait_eateries/p/DZ5RXEoiONs, @mug.cr ×2 — ALL HTTP 200 live.
+  - **Real Estate FAIL (D-RUN-1 HIGH)** — 0 offers in live mode. Root cause: `apify-social-provider.ts:32 realestate: []` (no live IG handles; Phase-2 ADR-006). RE flats exist only in MOCK provider. Screen renders empty "لا نتائج". Backend must seed KW real-estate IG handles for live demo.
+- Driving tip: search auto-runs from `?q=` deep-link (search.tsx:87). Food/RE need ~25-30s for Apify; browser fetch doesn't share curl's cache. IG cards are at list bottom — used non-destructive auto-scroll spa variant on :8766 to shoot them.
+
+## Prior state (v2 DEVICE QA)
+- Report: `team/qa/qa-v2-device-report.md`. Prior: `qa-simulator-report.md`, `qa-frontend-report.md`.
 - **SIM-HIGH-1 RESOLVED:** the web build now RENDERS in the sim (Safari, served :8765). Real shots `team/qa/sim/00-launch..07-settings.png` (category, intent, login, otp, paywall, subscription, profile, settings). Prior blank-render no longer repros on this build.
 - **PASS (render+look):** category-first landing (Electronics+Food active, Furniture/Cars Soon), intent screen (eyebrow+back chevron), OTP/login (+965, SMS fallback, resend timer), paywall ($1/mo), settings (biometric disabled "غير متوفر", notif single master toggle, plan مجاني), graceful error states (profile/subscription unauthed). v2 sand/teal/gold, RTL mirrored, Western numerals everywhere (format.ts -nu-latn + NumText).
 - **Electronics live search PASS at data layer:** real providers Eureka/Best Al-Yousifi/Blink, real KWD prices, real deeplinks, truthful why-this, clarifier MSA+chips. Exact-rich query shows zero alternative tags (F-SR1 AC-2 ✔).
 - **NEW HIGH DEFECTS (for Dev Lead):**
-  - **D-V2-1 (HIGH):** Food/Talabat returns 0 cards for EVERY query (برجر/بيتزا/شاورما/kfc…). Talabat endpoints reachable+parseable via curl (restaurants 200/42 slugs, kfc page vendorId 5804, menu JSON 55KB result.menu.menuSection[].itm[]) but API adapter yields nothing. Food category fully non-functional. Root cause in adapter (UA/CF from Node fetch / 4s timeout / parse) — backend fix.
+  - **D-V2-1 (HIGH) — RESOLVED 2026-06-26:** Food/Talabat now returns real cards live ("kfc"→55 dishes + 4 IG). Was 0 cards for every query. Verified on full real run.
+  - **D-RUN-1 (HIGH, NEW):** Real Estate = 0 offers in live mode. `apify-social-provider.ts:32 realestate: []` — no live IG handles seeded (Phase-2 ADR-006). RE flats only in mock provider. Backend: seed verified KW real-estate IG handles into live HANDLES map.
   - **D-V2-2 (HIGH):** empty state is bare 0-results, NO broadenSuggestions → violates F-SR1 AC-14 "never a dead end"; also no provider-error degraded flag to distinguish from true no-match.
   - **D-V2-3 (MED):** verdict ribbon assumes card #1=cheapest (search.tsx:144 "ranked cheapest-first") but ranker.ts sorts by match-QUALITY (spec+stock+price tiebreak). Live: #1=419.500 while #4=369.900 cheaper. "Best offer" crown + "saves vs average" can sit on a non-cheapest card / misstate savings.
   - **D-V2-4 (MED):** login shows dev-code hint "000000" but build runs OTP_PROVIDER=twilio (dev code rejected unless mock). Blocks on-device authed QA + misleads testers.

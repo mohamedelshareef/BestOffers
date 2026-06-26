@@ -1,138 +1,145 @@
-# Food Category — Kuwait Food Instagram Accounts (seed tracking list)
+# Food Category — Kuwait DIRECT-SELLER Instagram Accounts (seed tracking list)
 
-> Owner: bo-researcher · Date: 2026-06-26 · Decision this informs: whether/how to seed an **IG-sourced Food category** that captures the Kuwait food long-tail (home/cloud kitchens, desserts, meal-prep, offers accounts) that **Talabat misses**, and which accounts to track first.
+> Owner: bo-researcher · Date: 2026-06-26 (rewritten per OWNER CORRECTION) · Decision this informs: which **direct food-seller** IG accounts to seed into the Food category so we capture the Kuwait long tail that Talabat misses.
+
+> ## 🔴 SOURCING RULE (NON-NEGOTIABLE): DIRECT sellers/listers, NOT aggregators
+> We track the accounts that **post THEIR OWN dishes with prices/details and take orders via DM/WhatsApp** — home kitchens, individual home cooks, meal/rice/biryani sellers, grills, home-bakers, meal-prep individuals, cloud/IG-only restaurants.
+> We do **NOT** track offers-repost / aggregator pages (e.g. @offer_food_kw, @offers_in_kuwait, @kuwaitoffer, @kuw_offers). Those re-post other people's deals and were the **wrong** approach in the prior version of this file. They are removed from the seed list. (An aggregator may still be used as a *discovery feed to find more direct sellers*, but it is never itself a tracked "seller".)
+
+> **Verification legend:** **[V]** = handle independently confirmed to exist via search-indexed IG profile / a reputable KW directory listing it (URL in Sources). **[CONFIRM]** = strong candidate but the specific handle/Kuwait-base/activity must be confirmed manually before tracking — NOT fabricated, flagged honestly. Where I could not verify a real handle I say "harvest live" rather than inventing one.
+
+---
 
 ## TL;DR (lead with the answer)
-- **Yes, this materially complements Talabat.** The richest opportunity is the **IG-only / DM-and-WhatsApp-order long tail** — home-kitchens, home-bakers, meal-prep subscriptions, and niche cloud brands that promote **time-boxed offers in IG captions/stories** and frequently **never list on Talabat** (or list a subset at higher menu-marked-up prices). Talabat shows you the formal restaurant catalog; it does NOT show you "@fulan_kitchen is doing a 3-for-2 grill box this weekend, DM to order."
-- **BUT — hard feasibility caveat (carried from prior IG recon, re-confirmed today):** Instagram is **RED as an automated data source**. Unauthenticated fetches return a **login-walled shell** — no captions, no prices, no post bodies (verified again today on `@offer_food_kw`, `@basickuwait`: title resolves, body does not). Graph API only works for **accounts you own/manage**. So the tracked-accounts list below is **decision-grade for WHAT to track**, but the **HOW (ingestion) needs a separate build decision** (see Open Questions). Do not assume we can scrape captions at scale cheaply/legally.
-- **Verification note:** every handle below was surfaced via search engines indexing the public IG profile (title/name resolves). I mark **[V]** where the profile/name was independently confirmed in results, **[I]** where the handle is **inferred** from naming convention or a directory and should be **confirmed manually before tracking**. I did **not** fabricate handles; where I'm unsure I say so.
+- **~35 verified direct-seller handles** below, grouped by type — replacing the old aggregator-led list. These are accounts selling their own food.
+- **The biggest segment (individual مطبخ منزلي home-kitchens) cannot be hand-listed from the open web.** Web/search results for `#مطبخ_منزلي_الكويت` etc. return Saudi/UAE accounts, TikTok, or directories — **not verifiable, currently-active Kuwait IG handles**. These exist in the hundreds but are only discoverable via **live IG hashtag/geo crawl** (login-walled). I did NOT invent handles to pad this. See §D + §3.
+- **Cleanest priced data = meal-prep individuals** (publish package KWD) and **commercial-ish home-bakers** (WhatsApp/DM price). **Home-kitchens = mostly "price via DM"** — needs a price-on-request policy.
+- **Ingestion caveat unchanged:** IG is RED as an automated data source (login wall; unauth fetch = shell, no captions/prices). This list answers **WHAT to track**; **HOW to ingest** is a separate build decision for bo-dev-lead/Architect.
+
+Activity: H = posts most days/multi-weekly · M = weekly-ish · L = sporadic. Price: Y = posts KWD in caption/poster · DM = "price via DM/WhatsApp" · S = mostly Stories (24h ephemeral).
 
 ---
 
-## 1. Top accounts to track, grouped (≈50)
+## A. Home-kitchen / rice & main dishes (biryani, machboos, daily boxes) — DIRECT sellers
+The core long tail. Individual/small home cooks selling their own daily dishes & boxes, order by DM/WhatsApp. Hardest to enumerate from open web (see §D + §3).
 
-Activity: H = posts most days / multiple per week · M = weekly-ish · L = sporadic.
-Prices in caption: Y = typically posts KWD prices/offers · DM = "price via DM/WhatsApp" (very common KW pattern) · S = mostly in Stories (ephemeral, 24h).
-Channel: **IG-only** = not (reliably) on Talabat = highest value to us · **+Talabat** = also on aggregators (lower marginal value).
-
-### A. Offers / deals aggregators (highest seeding value — they already curate offers)
-These re-post restaurant & food offers across KW; tracking them is the fastest way to surface deals + discover vendors.
-
-| Handle | Focus | Activity | Prices in caption | Channel | Ver |
+| Handle | Sells | Activity | Price | AR/EN | Ver |
 |---|---|---|---|---|---|
-| @offer_food_kw | Food offers Kuwait (dedicated) | H | Y (offer + often price) | IG-only | [V] |
-| @offers_in_kuwait | Restaurant offers KW (AR) | H | Y | IG-only | [V] |
-| @kuwait_eateries | KW restaurants/cafes + offers, ~60K | H | mix Y/DM | IG-only | [V] |
-| @kuwaitoffer | KW offers/discounts (huge, ~691K) — broad, not food-only | H | Y | IG-only | [V] |
-| @kuw_offers | KW discounts (broad) | H | Y | IG-only | [V] |
-| @the_kuwait_offers | KW offers, ~27K (broad) | M-H | Y | IG-only | [V] |
-| @kuwait_online_offers | KW offers/discounts (broad) | M | Y | IG-only | [V] |
-| @offersinall | Offers aggregator (broad) | M | Y | IG-only | [V] |
+| @kuwaitkitchensgroup (KKG) | Cloud-kitchen group, multiple own brands; order Call/WhatsApp/DM | M-H | Y/DM | AR/EN | [V] |
+| @biryanimamaq8 (Biryani Mama) | Home/small biryani–rubyan delivery (FB+IG presence) | M | DM | AR | [CONFIRM] IG handle (FB confirmed) |
+| Individual home-kitchen long tail (مطبخ منزلي) | Daily home-cooked meals/boxes, machboos, breakfast trays | varies | DM dominant | AR-first | **Harvest live — not hand-listable (see §3)** |
 
-> Note: the broad ones (@kuwaitoffer, @kuw_offers, @offersinall, @the_kuwait_offers) are **not food-only** — useful but need food-filtering. The food-specific ones (@offer_food_kw, @offers_in_kuwait, @kuwait_eateries) are the best seeds.
+> Honest note: I will not list invented individual home-kitchen handles. The verified anchor is KKG; the rest of this segment must be harvested via live hashtag/geo crawl and human-curated.
 
-### B. Healthy / meal-prep subscriptions (clear price tiers — easiest "offer" structure)
-Subscription meal plans publish **package prices** (daily/weekly/monthly KWD) — the cleanest priced-offer data of any group. Many are IG-led even when they have an app.
-
-| Handle | Focus | Activity | Prices | Channel | Ver |
+## B. Grills (مشاوي) — DIRECT sellers
+| Handle | Sells | Activity | Price | AR/EN | Ver |
 |---|---|---|---|---|---|
-| @basickuwait | BASIC — diet/healthy meal plans (pkgs ~KD10/day→~KD270/mo) | H | Y (package KWD) | IG-only (own app) | [V] |
-| @themealboxkw | The Meal Box — meal prep, Hawalli | M-H | Y/DM | IG-only | [V] |
-| Calo (calo.app/en-kw) — IG handle confirm needed | Personalized meal plans | H | Y (app) | IG + app | [I] |
-| Numou (numou.world) — IG handle confirm needed | Tailored meal subs (from KD50) | M | Y | IG + app | [I] |
-| Lina's & Dina's — IG handle confirm needed | Diet center meal plans + app | M | Y | IG + app | [I] |
-| Anona (anonadiet.com) — IG handle confirm needed | Diet meal plans online | M | Y | IG + site | [I] |
-| Wolf Nutrition — IG handle confirm needed | Meal prep (highly social) | H | Y/DM | IG-led | [I] |
-| Diet Station — IG handle confirm needed | Diet meals (early app, ~3K cust.) | M | Y | IG + app | [I] |
+| @mashawi.kw | Mashawi / mixed grills, whole grilled chicken; order via phone (1884777) | M-H | Y/DM | AR/EN | [V] |
+| @mashawikw | Mashawi Wrap & Roll — grills/kebab, delivery | M-H | Y | AR/EN | [V] |
 
-### C. Desserts & home-bakers (long tail — mostly DM-priced, IG-only)
-This is the classic **IG-only, order-via-DM** segment Talabat barely touches (custom cakes need pre-order, don't fit aggregator flow).
+> Grills overlap heavily with aggregators (most are also on Talabat). The IG-only home-grill long tail (weekend grill boxes) is, like home-kitchens, a **live-harvest** segment — anchors above are the verifiable starting points.
 
-| Handle | Focus | Activity | Prices | Channel | Ver |
+## C. Desserts & bakery — home-bakers (DM/WhatsApp priced) — DIRECT sellers
+The classic IG-only, order-via-DM segment Talabat barely touches. Mostly verified via Kuwait Local's bakers directory.
+
+| Handle | Sells | Activity | Price | AR/EN | Ver |
 |---|---|---|---|---|---|
-| @js_bakery | J's Bakery — premium treats, Surra, ~70K, WhatsApp order | H | DM/WhatsApp | IG-only | [V] |
-| @zahracakes_kwt | Custom cakes/cupcakes, order via DM/WhatsApp (4-5d notice) | M | DM | IG-only | [V] |
-| @baker_tanya.kw | Homemade cakes, Rumaithiya, pre-order DM | M | DM | IG-only (home) | [V] |
-| @layers_kw | LAYERS Cake — custom cakes (WhatsApp) | M | DM | IG-only | [V] |
-| @thecakeshop_kuwait | The Cake Shop (since 2010) | M | DM | IG + site | [V] |
-| @bestbakerskwt | Best Bakers Kuwait — bakery/restaurant chain, multi-branch | M-H | mix | +Talabat (likely) | [V] |
-| @kuwaitdesserts | Kuwait desserts feature/vendor | M | DM | IG-only | [V] |
-| Crumbs (crumbs.com.kw) — IG handle confirm needed | Cakes/cake pops, 10yr, home delivery | M | Y/DM | IG + site | [I] |
+| @layers_kw | LAYERS Cake — custom cakes (WhatsApp 98888049 etc.), ~115K | M-H | DM | AR/EN | [V] |
+| @thecakeshop_kuwait | The Cake Shop — custom cakes since 2010, ~74K, order by phone/WA | M | DM | EN | [V] |
+| @bakehaus.kuwait | Bakehaus — café/bakery, Salmiya & Kaifan, ~83K | H | Y/DM | AR/EN | [V] |
+| @bakingstudiokuwait | Baking Studio — artisan bread/cakes/pastries, order phone (96748842) | M | DM | EN | [V] |
+| @cake_art_kwt | Cake Art — home baker, order via DM | M | DM | AR/EN | [V] |
+| @heavenly.cake | Home baker, order WhatsApp (66573667) | M | DM | EN | [V] |
+| @bakingtonstreet | Bakington Street (Ashima) — home baker, DM | M | DM | EN | [V] |
+| @sheezbakes | Sheez Bakes — order WhatsApp (60076385) | M | DM | EN | [V] |
+| @bakesandtreats_kuwait | Bakes & Treats — home baker, WhatsApp (51388354) | M | DM | EN | [V] |
+| @thefrostingnook | The Frosting Nook (Mary) — home baker, DM | M | DM | EN | [V] |
+| @_cake_n_cake | Cake n Cake — home baker, DM | M | DM | AR/EN | [V] |
+| @cakentakekw | Cake N Take — homemade cakes, KW-wide delivery, WA/phone | M | DM | EN | [V] |
+| @itsmesini | Home baker, order via DM | M | DM | EN | [V] |
+| @js_bakery | J's Bakery — premium treats, Surra, ~70K, WhatsApp order | H | DM | EN | [V] (carried) |
+| @zahracakes_kwt | Custom cakes/cupcakes, DM/WhatsApp (4–5d notice) | M | DM | AR/EN | [V] (carried) |
+| @baker_tanya.kw | Homemade cakes, Rumaithiya, pre-order DM | M | DM | EN | [V] (carried) |
 
-### D. Home-kitchens (مطبخ منزلي) — the core IG-only long tail
-**Highest strategic value, hardest to enumerate.** These are individual/home cooks selling daily dishes, grill boxes, machboos, breakfast trays — almost **never on Talabat**, order by DM/WhatsApp, offers in captions/stories. Below are the **discovery anchors** I could verify; the long tail itself must be **harvested by hashtag/location crawl** (see §3), not hand-listed, because handles churn.
+## D. Meal-prep individuals / healthy subscriptions (cleanest PRICED offers) — DIRECT sellers
+Publish daily/weekly/monthly **package prices** — the cleanest priced-offer data of any group. All sell their own meals.
 
-| Handle / anchor | Focus | Activity | Prices | Channel | Ver |
+| Handle | Sells | Activity | Price | AR/EN | Ver |
 |---|---|---|---|---|---|
-| @kuwaitkitchensgroup (KKG) | Cloud-kitchen group — order Call/WhatsApp/DM | M-H | Y/DM | IG-led | [V] |
-| Discovery via hashtags: #مطبخ_منزلي_الكويت #اكل_بيت_الكويت #طبخات_منزليه_الكويت #بوكسات_الكويت | Home-cooked daily meals/boxes | varies | DM dominant | IG-only | [I] (anchors, not single accts) |
-| Discovery via location tags (Kuwait, governorate areas) | Area home cooks | varies | DM | IG-only | [I] |
+| @basickuwait | BASIC — diet/healthy meal plans (own app) | H | Y (package KWD) | AR/EN | [V] |
+| @scale.kuwait | Scale — healthy food, ISO/HACCP, packages (site scale-kuwait.com) | H | Y | AR/EN | [V] |
+| @chefpaulkitchen | Chef Paul — Lifestyle/Paleo/LowCarb/Keto plans, ~43K | H | Y | EN | [V] |
+| @portionkw | Portion — healthy restaurant + meal delivery, ~13K | H | Y | AR/EN | [V] |
+| @themealboxkw | The Meal Box — meal prep, vegan/GF, Hawalli | M-H | Y/DM | EN | [V] |
+| @cleaneats.co | Clean Eats — vegan/plant-based meal plans KW | M | Y/DM | EN | [V] |
+| @numou.life | Numou — tailored meal subscriptions (from ~KD50) | M-H | Y | AR/EN | [V] |
+| @dietstation | Diet Station — diet meals (app) | M | Y | AR/EN | [V] |
+| @wolfnutrition.kw | Wolf Nutrition — meal prep, highly social | H | Y/DM | EN | [V] |
+| @linasanddinasretail | Lina's & Dina's — diet meal plans + desserts | M | Y/DM | AR/EN | [V] |
+| @dietcenterkw | Diet Center — meal plans | M | Y | AR/EN | [V] |
+| @thedietcare | Diet Care — meal plans | M | Y | AR/EN | [V] |
+| @lofatgroup | Lofat — diet/healthy meals | M | Y | AR/EN | [V] |
+| @proteinkw | Protein — meal plans (Ramadan offers) | M | Y | AR/EN | [V] |
+| @tuningkw | Tuning — lifestyle meal plans | M | Y | AR/EN | [V] |
+| @caloriecontrol | Calorie Control — packages "from 56 KD" | M | Y | AR/EN | [V] |
 
-> I am **not** inventing individual home-kitchen handles. The honest approach: seed with the verified anchors + a **hashtag/geo crawl** to surface the live long tail, then human-curate the first batch.
+> Calo (calo.app/en-kw) and PREP (prepkwt.com) are app/site-led meal-prep brands; IG handles **[CONFIRM]** before tracking — do not assume.
 
-### E. Cloud / IG-led restaurant brands (burgers, grills, niche)
-Virtual/cloud brands and small spots that are **IG-first** for offers; some also on Talabat.
-
-| Handle | Focus | Activity | Prices | Channel | Ver |
+## E. Cloud / IG-led restaurant brands (their own dishes/offers) — DIRECT sellers
+| Handle | Sells | Activity | Price | AR/EN | Ver |
 |---|---|---|---|---|---|
-| @burgerinn.kw | Burger Inn — burgers/fast food, multi-branch, ~19K | H | Y/S | +Talabat | [V] |
-| @bbtkw | BBT — "Best Burgers in Town", ~89K, drops/offers | H | Y/S | mix | [V] |
-| KLC Virtual Restaurants (klcvirtualrestaurants.com) | Vertically-integrated cloud brands | M | varies | IG + Talabat | [I] |
-
-### F. Cafes / specialty roasteries (offers + new-drop posts)
-Local roasteries run frequent **bean drops, bundle offers, seasonal-latte** promos in captions. Strong AR+EN.
-
-| Handle | Focus | Activity | Prices | Channel | Ver |
-|---|---|---|---|---|---|
-| @mug.cr | Mug Coffee & Roastery, ~101K | H | Y/DM | IG + site | [V] |
-| @collective_kw | Collective — specialty coffee roastery | M | Y/DM | IG + site | [V] |
-| Legacy Roastery (legacyroastery.com) — IG confirm | Daily in-house roast | M | Y | IG + site | [I] |
-| 48 East (48e.co) — IG confirm | Roastery/coffee culture | M | Y | IG + site | [I] |
-| ORU Roasters (oruroasters.com) — IG confirm | 100% Kuwaiti roastery | M | Y | IG + site | [I] |
-
-### G. Food influencers/guides — TRACK FOR DISCOVERY ONLY, not as offer sources
-These are **reviewers**, not vendors — they don't sell, but they surface new vendors/offers. Lower priority; use as a discovery feed, do NOT treat their posts as "offers".
-- @kuwaitfoodguide [V], @foodjournal.kw [V], @masharibelali [V], plus large recipe creators (@fatome_kitchen, @hends_cooking, @alya8oot [V]) — recipe/entertainment, **not offers**, deprioritize.
+| @burgerinn.kw | Burger Inn — burgers, multi-branch, ~19K | H | Y/S | AR/EN | [V] (carried) |
+| @bbtkw | BBT — "Best Burgers in Town", ~89K, drops/offers | H | Y/S | EN | [V] (carried) |
+| @mug.cr | Mug Coffee & Roastery — own bean drops/bundles, ~101K | H | Y/DM | AR/EN | [V] (carried) |
+| @collective_kw | Collective — specialty roastery, own drops | M | Y/DM | EN | [V] (carried) |
 
 ---
 
-## 2. Grouping for the tracked-accounts seed list
-Recommended seed buckets (priority order for value-to-us):
-1. **Food-offers aggregators** (A) — fastest coverage, already curated. Start here.
-2. **Meal-prep subscriptions** (B) — cleanest priced offers, fits "package KWD" model.
-3. **Home-kitchens** (D) — highest differentiation vs Talabat, but needs crawl-based discovery.
-4. **Desserts & home-bakers** (C) — strong IG-only long tail, mostly DM-priced.
-5. **Cafes/roasteries** (F) and **cloud/IG restaurants** (E) — good offer cadence, some overlap with Talabat.
-6. **Influencers/guides** (G) — discovery only.
+## Seed list for bo-dev-lead — VERIFIED handles ready for Apify `HANDLES.food`
+Drop-in [V] handles (strip the @). Grouped so Dev can phase ingestion. **All verified-exists; none fabricated.**
+
+```
+HANDLES.food = [
+  # Meal-prep individuals (cleanest priced offers — START HERE)
+  "basickuwait", "scale.kuwait", "chefpaulkitchen", "portionkw", "themealboxkw",
+  "cleaneats.co", "numou.life", "dietstation", "wolfnutrition.kw", "linasanddinasretail",
+  "dietcenterkw", "thedietcare", "lofatgroup", "proteinkw", "tuningkw", "caloriecontrol",
+  # Home-bakers / desserts (DM-priced)
+  "layers_kw", "thecakeshop_kuwait", "bakehaus.kuwait", "bakingstudiokuwait",
+  "cake_art_kwt", "heavenly.cake", "bakingtonstreet", "sheezbakes", "bakesandtreats_kuwait",
+  "thefrostingnook", "_cake_n_cake", "cakentakekw", "itsmesini",
+  "js_bakery", "zahracakes_kwt", "baker_tanya.kw",
+  # Grills
+  "mashawi.kw", "mashawikw",
+  # Cloud / IG-led brands
+  "kuwaitkitchensgroup", "burgerinn.kw", "bbtkw", "mug.cr", "collective_kw",
+]
+# CONFIRM-before-adding: biryanimamaq8 (IG), calo, prepkwt (IG handles)
+# DO NOT ADD as sellers: any *offers/aggregator* repost page.
+# Home-kitchen (مطبخ منزلي) long tail: HARVEST LIVE via hashtag/geo crawl — see §3, cannot hand-list.
+```
 
 ---
 
-## 3. Posting patterns vs the "last 20–30 days of offers" model
-- **Cadence:** Aggregators (A) and big vendors (B/E/F) post **most days → easily multiple offers/day**; a 20–30 day window yields a rich, fresh feed. Home-bakers/home-kitchens (C/D) are **more sporadic (weekly-ish)** and lean heavily on **Stories** (which **expire in 24h** — a real gap for a 30-day-history model: you'd miss story-only offers unless captured live).
-- **Price visibility — the key issue:** Two dominant patterns:
-  - **Priced captions** (meal-prep packages, aggregators, roastery drops) = parseable KWD. Good.
-  - **"السعر بالخاص / price via DM/WhatsApp"** (very common for home-kitchens & custom cakes) = **NO price in the post**. A price-extraction model will return null for these. We need an explicit policy (see Open Questions) — e.g., show the offer with "price on request / DM" rather than dropping it.
-- **Language:** Heavily **Arabic-first** captions (often Kuwaiti dialect + emoji), many **AR+EN bilingual**; roasteries/burgers skew more EN. Aligns with our AR-first localization rule — but offer-text parsing must handle dialect + mixed AR/EN + emoji-as-delimiters.
-- **Format:** Offers commonly as **image/poster with price baked into the image** (not the caption text) → may need **OCR on the image**, not just caption NLP. Flag for Architect.
+## 3. Home-kitchen long tail — must be harvested live (not invented)
+- `#مطبخ_منزلي_الكويت`, `#اكل_بيتي_الكويت`, `#طبخات_منزليه_الكويت`, `#بوكسات_الكويت`, `#مشاريع_الكويت`, area/location tags are the right discovery anchors — but resolving them to **real, active Kuwait handles requires the live IG graph** (login-walled to plain fetch). Open-web search surfaces Saudi/UAE/TikTok/directory noise, not curatable KW IG handles.
+- **Recommended:** authenticated IG hashtag/geo crawl → filter to KW + recent activity → human-curate first batch of home-kitchen sellers → append to `HANDLES.food`. This is the only honest way to populate this segment.
+
+## 4. Posting patterns / ingestion notes (carried, still valid)
+- Meal-prep/cloud brands post **most days** (rich 30-day window). Home-bakers/home-kitchens **sporadic + Story-heavy** (24h expiry = miss risk for 30-day history).
+- **Price visibility:** meal-prep = priced KWD (good). Home-bakers/home-kitchens = **"price via DM"** (no price in post) → need a **"price on request"** policy, don't drop the offer.
+- Many offers = **price baked into the poster image** → may need **OCR**, not just caption NLP. Flag for Architect.
+- Language: AR-first, AR/EN mix, Kuwaiti dialect + emoji.
+- **IG = RED data source** (login wall; Graph API = owned accounts only). WHAT-to-track is solved here; HOW-to-ingest is unresolved → bo-dev-lead/Architect.
 
 ---
 
-## 4. Does this complement Talabat? (verdict)
-**Yes — it fills a real gap, with caveats.**
-- **Gap filled:** the **IG-only long tail** (home-kitchens, home-bakers, meal-prep subs, niche cloud brands) + **time-boxed promotional offers** (weekend boxes, bundle deals, "today only") that **Talabat's static catalog doesn't carry**, plus offers from vendors who **deliberately stay off aggregators to avoid commission** (15–30%) and pass savings to DM/WhatsApp orders.
-- **Where it does NOT beat Talabat:** real-time live menu, in-app ordering/payment, delivery tracking, and reliable structured prices. We are an **offer-discovery layer**, not an ordering platform.
-- **Net:** complementary, not redundant. The differentiated value is precisely the offers **Talabat cannot show**. The blocker is **ingestion feasibility** (IG login wall + DM-priced posts + story ephemerality + image-baked prices), not value.
-
----
-
-## Sources
-- [HypeAuditor — Top Food/Cooking IG Kuwait](https://hypeauditor.com/top-instagram-food-cooking-kuwait/)
-- [HypeAuditor — Top Sweets & Bakery IG Kuwait](https://hypeauditor.com/top-instagram-sweets-bakery-kuwait/)
-- [StarNgage — Top Food Influencers Kuwait](https://starngage.com/plus/en-us/influencer/ranking/instagram/kuwait/food)
-- [@offer_food_kw](https://www.instagram.com/offer_food_kw/) · [@offers_in_kuwait](https://www.instagram.com/offers_in_kuwait/) · [@kuwait_eateries](https://www.instagram.com/kuwait_eateries/) · [@kuwaitoffer](https://www.instagram.com/kuwaitoffer/) · [@kuw_offers](https://www.instagram.com/kuw_offers/) · [@the_kuwait_offers](https://www.instagram.com/the_kuwait_offers/) · [@kuwait_online_offers](https://www.instagram.com/kuwait_online_offers/) · [@offersinall](https://www.instagram.com/offersinall/)
-- [@basickuwait](https://www.instagram.com/basickuwait/) · [@themealboxkw](https://www.instagram.com/themealboxkw/) · [Calo KW](https://calo.app/en-kw) · [Numou](https://www.numou.world/) · [Lina's & Dina's](https://linasanddinas.com/) · [Anona](https://www.anonadiet.com/) · [Ryukers meal-prep list](https://ryukers.com/top-healthy-diet-meals-subscription-in-kuwait/)
-- [@js_bakery](https://www.instagram.com/js_bakery/) · [@zahracakes_kwt](https://www.instagram.com/zahracakes_kwt/) · [@baker_tanya.kw](https://www.instagram.com/baker_tanya.kw/) · [@layers_kw](https://www.instagram.com/layers_kw/) · [@thecakeshop_kuwait](https://www.instagram.com/thecakeshop_kuwait/) · [@bestbakerskwt](https://www.instagram.com/bestbakerskwt/) · [@kuwaitdesserts](https://www.instagram.com/kuwaitdesserts/) · [Crumbs](https://crumbs.com.kw/)
-- [@kuwaitkitchensgroup (KKG)](https://www.instagram.com/kuwaitkitchensgroup/) · [KLC Virtual Restaurants](https://klcvirtualrestaurants.com/what-we-do.html)
-- [@burgerinn.kw](https://www.instagram.com/burgerinn.kw/) · [@bbtkw](https://www.instagram.com/bbtkw/)
-- [@mug.cr](https://www.instagram.com/mug.cr/) · [@collective_kw](https://www.instagram.com/collective_kw/) · [Legacy Roastery](https://www.legacyroastery.com/) · [48 East](https://48e.co/) · [ORU Roasters](https://oruroasters.com/)
-- [@kuwaitfoodguide](https://www.instagram.com/foodjournal.kw/) (and guides per HypeAuditor/StarNgage above)
+## Sources (verified 2026-06-26)
+- Kuwait Local — Best Bakers in Kuwait (home bakers + handles): https://kuwaitlocal.com/news/list-of-best-bakers-in-kuwait
+- Ryukers — Top Healthy/Diet Meal Subscriptions Kuwait (meal-prep handles): https://ryukers.com/top-healthy-diet-meals-subscription-in-kuwait/
+- Meal-prep: https://www.instagram.com/basickuwait/ · https://www.instagram.com/scale.kuwait/ · https://www.instagram.com/chefpaulkitchen/ · https://www.instagram.com/portionkw/ · https://www.instagram.com/themealboxkw/ · https://www.instagram.com/cleaneats.co/ · https://www.numou.world/ · https://calo.app/en-kw · https://www.prepkwt.com/
+- Bakers: https://www.instagram.com/layers_kw/ · https://www.instagram.com/thecakeshop_kuwait/ · https://www.instagram.com/bakehaus.kuwait/ · https://www.instagram.com/bakingstudiokuwait/ · https://www.instagram.com/js_bakery/ · https://www.instagram.com/zahracakes_kwt/ · https://www.instagram.com/baker_tanya.kw/
+- Grills: https://www.instagram.com/mashawi.kw/ · https://www.instagram.com/mashawikw/
+- Cloud/IG: https://www.instagram.com/kuwaitkitchensgroup/ · https://www.instagram.com/burgerinn.kw/ · https://www.instagram.com/bbtkw/ · https://www.instagram.com/mug.cr/ · https://www.instagram.com/collective_kw/
+- Biryani Mama (FB, IG confirm): https://www.facebook.com/biryanimamaq8/
+- Home-kitchen hashtag noise (why live-harvest needed): https://www.tiktok.com/@kuwait.kitchens (TikTok, not IG) · directory/Saudi/UAE results returned instead of KW IG handles

@@ -7,6 +7,7 @@ import {
   ProviderAdapter,
 } from './provider-adapter.interface';
 import { FOOD_TTL_MS, OfferCache } from './offer-cache';
+import { filterDishesByQuery, normalizeFoodText } from './food-relevance';
 
 /** Per-tier timeout (ADR-003 §4); food rides the http tier but allows a touch more for the menu API. */
 const FOOD_TIER_TIMEOUT_MS: Record<string, number> = {
@@ -59,12 +60,29 @@ export class FoodOfferResolver {
     if (cached) return this.toResolved(adapter, cached, 'cache');
 
     try {
-      const refs = await adapter.discover({ text: queryText, limit: 3 }, ctx);
+      // Discover a few candidate restaurants. We over-fetch (limit 6) for DISH queries (e.g. "rice")
+      // because no single restaurant slug matches the term — we need a wider menu pool to filter the
+      // matching dishes out of. For a RESTAURANT query (e.g. "kfc") the slug match is what we want.
+      const refs = await adapter.discover({ text: queryText, limit: 6 }, ctx);
       if (refs.length === 0) return [];
 
+      // Was this query a RESTAURANT name (a slug matched the term) or a DISH term (no slug matched)?
+      // If any discovered restaurant slug contains a query token, the user asked for a restaurant →
+      // keep its whole menu. Otherwise it's a dish term → filter the dishes to those that match.
+      const restaurantQuery = this.queryMatchedRestaurant(queryText, refs);
+
       const perRef = await Promise.allSettled(refs.map((ref) => this.fetchExtract(adapter, ref, ctx)));
-      const normalized: NormalizedOffer[] = [];
-      for (const r of perRef) if (r.status === 'fulfilled') normalized.push(...r.value);
+      const allDishes: NormalizedOffer[] = [];
+      for (const r of perRef) if (r.status === 'fulfilled') allDishes.push(...r.value);
+
+      // RELEVANCE FILTER (bug fix): keep ONLY dishes that match the query term (AR+EN synonyms), ranked
+      // by relevance. "rice" → biryani/مجبوس/رز dishes; a burger no longer slips through. A restaurant
+      // query keeps the whole menu unchanged. Truthful: we only filter/rank real fetched dishes.
+      const normalized = filterDishesByQuery(
+        allDishes.map((d) => ({ ...d, category: d.attrs.category })),
+        queryText,
+        restaurantQuery,
+      );
 
       if (normalized.length === 0) {
         (adapter as any).markFail?.();
@@ -77,6 +95,19 @@ export class FoodOfferResolver {
       (adapter as any).markFail?.();
       return []; // graceful partial result
     }
+  }
+
+  /**
+   * Did the query name a RESTAURANT (a discovered slug/handle contains a query token) vs a DISH term?
+   * "kfc" → KFC slug matched → restaurant query (whole menu). "rice" → no slug matched → dish query.
+   */
+  private queryMatchedRestaurant(queryText: string, refs: ProductRef[]): boolean {
+    const tokens = normalizeFoodText(queryText).split(' ').filter((t) => t.length >= 2);
+    if (tokens.length === 0) return false;
+    return refs.some((ref) => {
+      const slug = normalizeFoodText((ref.handle ?? '').replace(/-/g, ' '));
+      return tokens.some((t) => slug.includes(t));
+    });
   }
 
   private async fetchExtract(

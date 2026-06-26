@@ -28,7 +28,47 @@ class FakeTalabat implements ProviderAdapter {
   health(): AdapterHealth { return { lastOkAt: null, consecutiveFailures: 0 }; }
 }
 
+// Multi-restaurant fake: discovery returns several restaurants whose FULL menus mix rice + non-rice
+// dishes — the resolver must filter to the query term ("rice") and drop the burger.
+class FakeMultiMenu implements ProviderAdapter {
+  providerId = 'prov_talabat'; providerName = 'Talabat'; sector = 'food' as const;
+  tier = 'http' as const; enabled = true;
+  async discover(_q: DiscoveryQuery, _c: FetchCtx): Promise<ProductRef[]> {
+    // none of these slugs contain "rice" → resolver treats it as a DISH query (filter dishes)
+    return [
+      { url: 'menu#slug=burger-king', handle: 'burger-king' },
+      { url: 'menu#slug=chicken-tikka', handle: 'chicken-tikka' },
+    ];
+  }
+  async fetch(ref: ProductRef, _c: FetchCtx): Promise<RawPage> {
+    return { url: ref.url, json: { handle: ref.handle }, fetchedAt: 'T' };
+  }
+  async extract(raw: RawPage): Promise<NormalizedOffer[]> {
+    const slug = (raw.json as any).handle;
+    if (slug === 'burger-king') {
+      return [
+        mk('Whopper — Burger King', 'Burgers', 2950),
+        mk('French Fries — Burger King', 'Sides', 950),
+      ];
+    }
+    return [
+      mk('Chicken Biryani — Chicken Tikka', 'Biryani', 2750),
+      mk('مجبوس دجاج — Chicken Tikka', 'الرز', 3000),
+      mk('Grilled Chicken — Chicken Tikka', 'Grills', 2200),
+    ];
+  }
+  health(): AdapterHealth { return { lastOkAt: null, consecutiveFailures: 0 }; }
+}
+function mk(title: string, category: string, priceFils: number): NormalizedOffer {
+  return {
+    providerSkuRef: title, title, priceFils,
+    attrs: { currency: 'KWD', category }, deeplink: 'https://www.talabat.com/kuwait/x',
+    inStock: true, source: 'http', fetchedAt: 'T',
+  };
+}
+
 const intent: IntentNormalized = { category: 'food', model: 'kfc', constraints: {} };
+const riceIntent: IntentNormalized = { category: 'food', model: 'rice', constraints: {} };
 
 describe('FoodOfferResolver (ADR-005 Slice F-1)', () => {
   it('synthesizes a dish-Sku + Offer per real dish (truthful passthrough)', async () => {
@@ -49,6 +89,30 @@ describe('FoodOfferResolver (ADR-005 Slice F-1)', () => {
     expect(first[0].offer.source).toBe('live');
     expect(second[0].offer.source).toBe('cache');
     expect(a.discovers).toBe(1); // second call hit cache → no second discover
+  });
+
+  it('a DISH query ("rice") returns ONLY rice/biryani/مجبوس dishes — the burger is excluded', async () => {
+    const r = new FoodOfferResolver([new FakeMultiMenu()], new InMemoryOfferCache());
+    const res = await r.resolve(riceIntent);
+    const names = res.map((o) => o.sku.canonicalName);
+    expect(names).toEqual(expect.arrayContaining([
+      'Chicken Biryani — Chicken Tikka',
+      'مجبوس دجاج — Chicken Tikka',
+    ]));
+    // the query term CONSTRAINS the result set — no burgers/fries/grills
+    expect(names).not.toContain('Whopper — Burger King');
+    expect(names).not.toContain('French Fries — Burger King');
+    expect(names).not.toContain('Grilled Chicken — Chicken Tikka');
+    expect(res.length).toBe(2);
+  });
+
+  it('a RESTAURANT query (slug matches the term) keeps the whole menu', async () => {
+    // "burger-king" slug contains the token "burger" → restaurant query → no dish filter
+    const r = new FoodOfferResolver([new FakeMultiMenu()], new InMemoryOfferCache());
+    const res = await r.resolve({ category: 'food', model: 'burger king', constraints: {} });
+    const names = res.map((o) => o.sku.canonicalName);
+    expect(names).toContain('Whopper — Burger King');
+    expect(names).toContain('French Fries — Burger King'); // whole menu kept, not just "burger"-named items
   });
 
   it('kill-switch (enabled=false) yields zero offers; a failing adapter degrades to partial []', async () => {
