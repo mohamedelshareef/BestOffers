@@ -332,6 +332,22 @@
   issueSessionForPhone — that's a separate proven path.) Applied via `npm run db:supabase:push` (auto-picks
   the new .sql). PROVEN LIVE: DB_DRIVER=pg request→verify(000000) against Supabase persisted real auth_users
   +profile+quota(0)+sub(none), FK-linked, then cleaned up.
+- **SANDBOX SENDER WIRED + VERIFIED (2026-06-26, 121/121 api; +1 spec):** owner set `OTP_PROVIDER=twilio`,
+  `TWILIO_WHATSAPP_FROM=whatsapp:+14155238886` (sandbox), `TWILIO_SMS_FROM=+12602543269`. `/health`→`otp:twilio`
+  (booted real Nest :3112 w/ repo .env). **BUG FOUND+FIXED (real):** `.env` From already carries the `whatsapp:`
+  prefix, but `send()` prepended it again → `whatsapp:whatsapp:+1415…` (Twilio rejects). FIX: `bareNumber()`
+  strips a leading `whatsapp:`/`sms:` before re-prefixing → exactly one prefix. Spec contract (bare-number env)
+  UNCHANGED + green; added regression test for the already-prefixed sandbox value. DRY-RUN against real .env
+  (fetch intercepted, NO send): WA `From=whatsapp:+14155238886 To=whatsapp:<dest>` AR body, SMS fallback
+  `From=+12602543269 To=<dest>` plain — both POST `Messages.json` w/ real SID AC416b…, Basic auth.
+- **ONE-SHOT LIVE-SEND PATH:** `apps/api/scripts/send-sandbox-otp.mjs` (thin CLI over compiled TwilioOtpSender).
+  GUARDED: refuses w/o a valid E.164 dest (exit 2 — proven), checks OTP_PROVIDER=twilio + health. RUN (only with
+  an opted-in number): `cd apps/api && DOTENV_CONFIG_PATH=<repo>/.env node -r dotenv/config
+  scripts/send-sandbox-otp.mjs +9655XXXXXXX [code] [ar|en]`. NOT run yet (no number supplied). GOTCHA: pass
+  DOTENV_CONFIG_PATH explicitly — `-r dotenv/config` from apps/api otherwise looks for apps/api/.env (none).
+- **OWNER OPT-IN STEPS (sandbox delivery):** Twilio Console → Messaging → Try it out → Send a WhatsApp message;
+  from the DESTINATION phone send `join <two-words>` to +1 415 523 8886. Opt-in lasts 24h (re-join if lapsed).
+  Sandbox = freeform body, NO approved template needed (templates only for production WA Business sender).
 - **LIVE-SEND BLOCKER (real, from Twilio API w/ the .env creds):** Account is TRIAL ("HighMarks"). Football's
   number +12602543269 has SMS+Voice ONLY — **NOT WhatsApp-enabled**. Only WA sender on the account is
   whatsapp:+14155238886 (= Twilio SANDBOX, status OFFLINE). So OTP_PROVIDER=twilio + whatsapp channel will

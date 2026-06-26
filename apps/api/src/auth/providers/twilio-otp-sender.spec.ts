@@ -79,6 +79,16 @@ describe('TwilioOtpSender (replicates Football/Supabase Twilio-WhatsApp transpor
     expect(body.get('From')).toBe('whatsapp:+19998887777');
   });
 
+  it('normalizes an already-prefixed sandbox From (whatsapp:+1415…) — no double whatsapp: prefix', async () => {
+    // The owner's .env sets the Twilio WhatsApp Sandbox sender WITH the prefix already present.
+    process.env.TWILIO_WHATSAPP_FROM = 'whatsapp:+14155238886';
+    mockTwilioOk();
+    await new TwilioOtpSender().send({ phoneE164: '+96512345678', code: '778899', locale: 'en', channel: 'whatsapp' });
+    const body = new URLSearchParams((calls[0].init.body as URLSearchParams).toString());
+    expect(body.get('From')).toBe('whatsapp:+14155238886'); // exactly one prefix
+    expect(body.get('To')).toBe('whatsapp:+96512345678');
+  });
+
   it('emits an Arabic body when locale=ar', async () => {
     mockTwilioOk();
     await new TwilioOtpSender().send({ phoneE164: '+96512345678', code: '445566', locale: 'ar', channel: 'whatsapp' });

@@ -38,6 +38,11 @@ export class TwilioOtpSender implements OtpSender {
     return `https://api.twilio.com/2010-04-01/Accounts/${this.sid}/Messages.json`;
   }
 
+  /** Strip a leading `whatsapp:` (or `sms:`) so we always hold the bare E.164 and add the channel prefix once. */
+  private bareNumber(v: string | undefined): string | undefined {
+    return v?.replace(/^(whatsapp|sms):/i, '');
+  }
+
   private assertConfigured(channel: 'whatsapp' | 'sms') {
     if (!this.sid || !this.token) throw new Error('Twilio not configured (TWILIO_ACCOUNT_SID/AUTH_TOKEN)');
     if (channel === 'whatsapp' && !this.waFrom) throw new Error('TWILIO_PHONE_NUMBER/TWILIO_WHATSAPP_FROM not set');
@@ -54,8 +59,12 @@ export class TwilioOtpSender implements OtpSender {
   async send(input: OtpSendInput): Promise<{ messageId: string; channel: 'whatsapp' | 'sms' }> {
     this.assertConfigured(input.channel);
     // WhatsApp channel = `whatsapp:` prefix on BOTH From and To (the Supabase/Twilio WhatsApp shape).
+    // Normalize the env value to a bare E.164 first so a `whatsapp:+1415…` in .env (the sandbox value)
+    // does NOT become `whatsapp:whatsapp:+1415…`; we add the channel prefix exactly once.
     const from =
-      input.channel === 'whatsapp' ? `whatsapp:${this.waFrom}` : (this.smsFrom as string);
+      input.channel === 'whatsapp'
+        ? `whatsapp:${this.bareNumber(this.waFrom)}`
+        : (this.bareNumber(this.smsFrom) as string);
     const to =
       input.channel === 'whatsapp' ? `whatsapp:${input.phoneE164}` : input.phoneE164;
 
