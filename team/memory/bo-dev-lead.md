@@ -180,11 +180,54 @@
   GOTCHA: real-Claude clarifier (CLAUDE_PROVIDER=anthropic) loops/varies budget questions + can parse
   "٥٠٠ دينار" as fils-vs-KWD non-deterministically → use mock clarifier for the screenshot; real-Claude
   EXTRACTION (anthropic) is the verified core. RN-web Pressables don't reliably take scripted CDP clicks.
-- **MOCK→REAL go-live (ADR-006):** (1) Apify acct + APIFY_TOKEN (Starter $30/mo), set SOCIAL_PROVIDER=
-  apify + finish ApifySocialProvider.fetchPosts (run actor, poll, map dataset rows). (2) curated
-  tracked_accounts allow-list (~10 food + ~10 RE handles from the research). (3) LEGAL sign-off on Meta
-  ToS/IP/PII — biggest legal flag in the project; gate `tos_reviewed=false` internal-only until counsel.
-  Extraction already real (Claude). Persist social_offers table (TTL 6-12h) + BullMQ delta-pull scheduler.
+## REAL APIFY IG + v2 HIGH-defect fixes (2026-06-26 — 120/120 api · 22/22 mobile, REAL-proven)
+- **GOAL 1 — REAL Apify Instagram lane LIVE.** `apify-social-provider.ts` `fetchPosts` IMPLEMENTED (was
+  stub). VERIFIED REAL call shape (free-tier APIFY_TOKEN in repo .env, SOCIAL_PROVIDER=apify): `POST
+  https://api.apify.com/v2/acts/apify~instagram-scraper/run-sync-get-dataset-items?token=$APIFY_TOKEN`
+  body `{directUrls:["https://www.instagram.com/<handle>/"],resultsType:"posts",resultsLimit:N,
+  onlyPostsNewerThan:"30 days"}` → HTTP 201 (~20-40s, synchronous) JSON ARRAY of rows
+  `{id,shortCode,caption,hashtags,url,timestamp,displayUrl,ownerUsername}` (url=permalink, timestamp=ISO).
+  `mapRow(row,vertical)` (EXPORTED, unit-tested) → RawPost; **skips `{error:'not_found'}`/error rows +
+  caption-less + permalink-less rows.** Actor id `apify/instagram-scraper`→`apify~instagram-scraper`
+  (`/`→`~` in run path). Curated FOOD_HANDLES=`[offer_food_kw,basickuwait,kuwait_eateries,themealboxkw,
+  mug.cr]` ([V] from food-instagram-accounts.md); realestate handles NOT seeded yet (returns []).
+  COST GUARDS: in-process TTL cache per vertical (SOCIAL_TTL_MS 6h — user traffic NEVER triggers a run) +
+  monthly call cap (SOCIAL_MONTHLY_RESULT_CAP, default 50; month rollover resets; cap-hit serves stale
+  cache or []) + perHandleLimit (APIFY_RESULTS_LIMIT, default 10, hard-max 30). Mock stays default for
+  offline/tests. **REAL E2E PROVEN:** SOCIAL_PROVIDER=apify + SOCIAL_EXTRACTOR=anthropic, food "offer" →
+  real IG posts (offer_food_kw/mug.cr/kuwait_eateries) → REAL Claude extract → cards w/ REAL permalinks
+  (e.g. `instagram.com/p/DZ2S4cCMAQd/`, `/DZxvz_OCGwA/`). Captions w/o literal KWD → "السعر بالخاص — شوف
+  البوست" (truthfulness guard, correct). Full app (Talabat LIVE + Apify merged): 273 cards, 3 IG-tagged.
+- **D-V2-1 FIXED (HIGH) — root cause was NOT the Talabat adapter.** FoodOfferResolver returns 55/289/67
+  real dishes fine (unit-proven). The real cause: with CLAUDE_PROVIDER=anthropic, `assembleCards` →
+  `this.claude.explainRanking()` was awaited with NO try/catch; the real Claude hit `stop_reason=
+  max_tokens` on 55+ food offers and THREW → entire `/search` 500'd → QA saw "0 cards". FIX (search.
+  service.ts assembleCards): wrap explainRanking in try/catch → `explanations=[]` on failure; every card
+  already has a data-only "why" fallback (verifyCitation path) so it degrades, never blocks. The "why" is
+  the ONLY model-authored field; price/provider/deeplink are DATA. **DO NOT remove this guard.** Mock
+  Claude never reproduced this (it skips food clarifiers + returns explanations) — only real Claude did.
+- **D-V2-1 #2 FIXED — real Claude asked electronics clarifiers (storage/color/budget) for "kfc".**
+  Mock-claude returns needClarification=false for food/realestate; real Claude does NOT honor that. FIX
+  (search.service.ts `advance`): `isDiscoverySector = sector===food||realestate` → `canAskMore=false` →
+  discovery sectors go STRAIGHT to results (deterministic across both providers). clarifierCount=0 now.
+- **D-V2-2 verified (HIGH) — empty state already returns `broadenSuggestions` (search.service.ts:186,
+  always ≥1 via the category-pivot fallback in fallback.ts:233).** QA saw none only because the run 500'd
+  before reaching the empty branch (the explainRanking throw above) — the D-V2-1 fix makes it reachable.
+  Confirmed live: electronics impossible-model → state=empty + broadenSuggestions=[{model,category,
+  "Browse the whole category"}]; food genuine-empty path same.
+- **TESTS +10:** `apify-social-provider.spec.ts` (mapRow real row / not_found skip / shortCode-derived
+  permalink / caption-less skip / token-missing throws / no-handle vertical []) + `search-resilience.spec
+  .ts` (explainRanking-throws→still results+data-only why; food discovery→clarifierCount 0; empty→≥1
+  broaden). SearchService unit-constructed w/ flaky-Claude stub + real SessionStore/EventsService.
+- **GOTCHA (durable):** run api specs from `apps/api` (its own jest+ts-jest config); root `npx jest` uses
+  babel parser on .ts → SyntaxError. Apify run-sync call takes 20-40s (synchronous actor) — fine for a
+  scheduled delta-pull behind the 6h cache, NOT for per-request live (cache decouples it, by design).
+- **STILL TODO (ADR-006 go-live):** persist social_offers table + tracked_accounts admin CRUD + BullMQ
+  delta-pull scheduler (cache is in-process now); seed RE handles; LEGAL Meta ToS/IP/PII sign-off (gate
+  tos_reviewed=false internal-only). Apify token is free-tier — watch the monthly cap.
+
+- **MOCK→REAL go-live (ADR-006) [SUPERSEDED above for food]:** RE lane + tracked_accounts table + BullMQ
+  scheduler + legal sign-off still pending; food Apify lane now REAL + proven.
 
 ## History (terse — durable facts preserved; full narrative pruned 2026-06-26)
 - **Sprint 2.5:** monorepo (ADR-001/002). `npm run demo` = migrate→seed→API:3000→Expo Web; `demo:export`→
@@ -264,10 +307,37 @@
 - **RUN CMD (Supabase mode):** `cd apps/api && DOTENV_CONFIG_PATH=<repo>/.env DB_DRIVER=pg AUTH_MODE=supabase
   STORAGE_PROVIDER=supabase BILLING_PROVIDER=mock PORT=3000 node -r dotenv/config dist/main.js` (build first:
   `npm run build:types && npm run build --workspace=apps/api`). `/health.providers.db/auth/storage` reflect mode.
-- **NOT cut over (intentional, mock/local still):** OTP request/verify (auth_users/auth_otps/auth_sessions
-  DON'T exist in PG — Supabase Auth owns identity; in pg mode auth goes via Supabase directly, our local OTP
-  flow is sqlite/local-only). Stripe billing still mock (StripeBillingProvider config-ready). main.ts rawBody
-  for real Stripe webhook still TODO. SUPABASE_JWKS_URL/JWT_ISSUER not in .env → derived from SUPABASE_URL.
+- **NOT cut over (intentional, mock/local still):** Stripe billing still mock (StripeBillingProvider
+  config-ready). main.ts rawBody for real Stripe webhook still TODO. SUPABASE_JWKS_URL/JWT_ISSUER not in
+  .env → derived from SUPABASE_URL.
+
+## WHATSAPP OTP — Football-replicated, LIVE in BOTH modes (2026-06-26, additive)
+- **Tests: 110/110 api (was 102; +8 `auth/providers/twilio-otp-sender.spec.ts`).** Mock default stays green.
+- **FOOTBALL'S ACTUAL METHOD (verified `/Football/src/contexts/AuthContext.tsx`):** NO direct Twilio code.
+  It delegates to SUPABASE AUTH phone-OTP: `supabase.auth.signInWithOtp({phone, options:{channel:'whatsapp'}})`
+  to SEND, `supabase.auth.verifyOtp({phone, token, type:'sms'})` to VERIFY. Supabase Auth is wired (dashboard
+  → Auth → SMS provider) to TWILIO via TWILIO_ACCOUNT_SID/AUTH_TOKEN/TWILIO_PHONE_NUMBER and delivers over
+  Twilio's WhatsApp channel. Football's `docs/TODO.md`: "Code already calls signInWithOtp({phone}) — this is
+  config only." So the underlying transport = Twilio WhatsApp channel (whatsapp: From/To on Messages.json).
+- **REPLICATION (BestOffers runs its OWN OTP flow):** `auth/providers/twilio-otp-sender.ts` reproduces that
+  transport: POST `https://api.twilio.com/2010-04-01/Accounts/{SID}/Messages.json`, Basic auth, form body
+  `From=whatsapp:{number} To=whatsapp:{e164} Body={code …}`. SMS fallback = plain From/To same endpoint.
+  Uses Football's env name `TWILIO_PHONE_NUMBER` (overrides TWILIO_WHATSAPP_FROM/TWILIO_SMS_FROM optional).
+  Selected by OTP_PROVIDER=twilio (covers 360dialog). Spec mocks fetch → asserts endpoint+payload shape.
+- **BOTH MODES:** SQLite mock-default unchanged (verify 000000). For Supabase pg mode, NEW pg migration
+  `db/postgres/0004_custom_otp_plane.sql` creates `public.auth_users`+`auth_otps`+`auth_sessions` (0002 PG
+  port had OMITTED them, assuming Supabase-Auth-owned identity) and RE-POINTS profiles/subscriptions/
+  search_quota/notification_tokens FKs from `auth.users` → `public.auth_users` so issueSessionForPhone's
+  inserts succeed under the custom JWT plane. (AUTH_MODE=supabase path = unaffected; it never calls
+  issueSessionForPhone — that's a separate proven path.) Applied via `npm run db:supabase:push` (auto-picks
+  the new .sql). PROVEN LIVE: DB_DRIVER=pg request→verify(000000) against Supabase persisted real auth_users
+  +profile+quota(0)+sub(none), FK-linked, then cleaned up.
+- **LIVE-SEND BLOCKER (real, from Twilio API w/ the .env creds):** Account is TRIAL ("HighMarks"). Football's
+  number +12602543269 has SMS+Voice ONLY — **NOT WhatsApp-enabled**. Only WA sender on the account is
+  whatsapp:+14155238886 (= Twilio SANDBOX, status OFFLINE). So OTP_PROVIDER=twilio + whatsapp channel will
+  401/fail until: (a) recipient opts into the Twilio WhatsApp Sandbox (msg the join code to +14155238886) and
+  set TWILIO_WHATSAPP_FROM=+14155238886; OR (b) a real WhatsApp Business sender is approved. SMS works today
+  (the +12602543269 number is SMS-capable, trial → only verified destination numbers).
 - **RENDER-FIX (app RENDERS):** root cause = duplicate React in web bundle → null hook dispatcher. FIX =
   `apps/mobile/metro.config.js` (LOAD-BEARING, do NOT delete) pins react/react-dom/jsx-runtime to mobile copy.
   2nd bug: `src/api/config.ts` passed bare global `fetch` → `Illegal invocation`; fixed with boundFetch.

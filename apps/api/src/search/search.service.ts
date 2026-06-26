@@ -106,7 +106,13 @@ export class SearchService {
     session: SearchSession,
     proposedQuestion?: { dimension: string; textAr: string; textEn: string; chips: any[] },
   ): Promise<SearchResponse> {
-    const canAskMore = session.clarifierCount < MAX_CLARIFIER_QUESTIONS;
+    // DISCOVERY SECTORS (food, realestate) go straight to results — code-enforced, NOT prompt-trusted.
+    // Each dish/flat IS its own result (no canonical SKU to disambiguate by storage/color/budget), so
+    // the electronics clarifier dimensions don't apply. Mock-claude already returns needClarification=
+    // false for these; the REAL Claude does NOT reliably honor that and asked storage/color for "kfc"
+    // (D-V2-1 root cause #2). Suppressing here makes the behavior deterministic across both providers.
+    const isDiscoverySector = session.sector === 'food' || session.sector === 'realestate';
+    const canAskMore = !isDiscoverySector && session.clarifierCount < MAX_CLARIFIER_QUESTIONS;
     const notAlreadyAsked =
       !!proposedQuestion && !session.askedDimensions.includes(proposedQuestion.dimension);
 
@@ -273,11 +279,21 @@ export class SearchService {
     ranked: TaggedOffer[],
     fallbackTriggered = false,
   ): Promise<ResultCard[]> {
-    const explanations = await this.claude.explainRanking({
-      intentNormalized: session.intentNormalized,
-      locale: session.locale,
-      rankedOffers: ranked.map((r) => ({ offer: r.offer, sku: r.sku })),
-    });
+    // The "why" text is the ONLY model-authored field on a card; price/provider/deeplink are DATA.
+    // A model failure (max_tokens, refusal, network) must NEVER abort the search — every card already
+    // has a truthful data-only "why" fallback below. So we degrade to empty explanations instead of
+    // letting explainRanking throw out of runSearch (which previously 500'd the whole food result and
+    // surfaced as "0 cards" — D-V2-1). Truthful by construction: a missing explanation → data-only why.
+    let explanations: Awaited<ReturnType<typeof this.claude.explainRanking>> = [];
+    try {
+      explanations = await this.claude.explainRanking({
+        intentNormalized: session.intentNormalized,
+        locale: session.locale,
+        rankedOffers: ranked.map((r) => ({ offer: r.offer, sku: r.sku })),
+      });
+    } catch {
+      explanations = []; // never-block: cards fall through to the data-only "why" path below.
+    }
     const byOffer = new Map(explanations.map((e) => [e.offerId, e]));
 
     return ranked.map((r) => {

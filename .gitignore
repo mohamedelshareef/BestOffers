@@ -12,3 +12,5 @@ coverage/
 *.sqlite-journal
 .DS_Store
 .storage/
+*.sqlite-shm
+*.sqlite-wal
