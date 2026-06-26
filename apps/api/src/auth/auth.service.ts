@@ -53,10 +53,6 @@ export class AuthService {
     @Inject(OTP_SENDER) private readonly otp: OtpSender,
   ) {}
 
-  private get db() {
-    return this.dbs.db;
-  }
-
   private hash(s: string): string {
     return createHash('sha256').update(s).digest('hex');
   }
@@ -68,41 +64,42 @@ export class AuthService {
 
     // Rate-limit: ≤5 requests / hour / phone (F-C1 AC-6).
     const windowStart = new Date(now - REQUEST_WINDOW_MS).toISOString();
-    const recent = this.db
-      .prepare('SELECT COUNT(*) c FROM auth_otps WHERE phone_e164=? AND created_at >= ?')
-      .get(phoneE164, windowStart) as { c: number };
+    const recent = (await this.dbs.get<{ c: number }>(
+      'SELECT COUNT(*) c FROM auth_otps WHERE phone_e164=? AND created_at >= ?',
+      [phoneE164, windowStart],
+    )) ?? { c: 0 };
     if (recent.c >= MAX_REQUESTS_PER_WINDOW) {
       throw new HttpException('too many requests, try later', HttpStatus.TOO_MANY_REQUESTS);
     }
 
     // Resend cooldown: 30s since the latest code for this phone (F-C1 AC-5).
-    const last = this.db
-      .prepare('SELECT created_at FROM auth_otps WHERE phone_e164=? ORDER BY created_at DESC LIMIT 1')
-      .get(phoneE164) as { created_at: string } | undefined;
+    const last = await this.dbs.get<{ created_at: string }>(
+      'SELECT created_at FROM auth_otps WHERE phone_e164=? ORDER BY created_at DESC LIMIT 1',
+      [phoneE164],
+    );
     if (last && now - Date.parse(last.created_at) < RESEND_COOLDOWN_MS) {
       throw new HttpException('please wait before requesting another code', HttpStatus.TOO_MANY_REQUESTS);
     }
 
     // Resending invalidates prior codes — only the latest is valid (F-C1 AC-5).
-    this.db.prepare("UPDATE auth_otps SET consumed_at=? WHERE phone_e164=? AND consumed_at IS NULL").run(
+    await this.dbs.run('UPDATE auth_otps SET consumed_at=? WHERE phone_e164=? AND consumed_at IS NULL', [
       new Date(now).toISOString(),
       phoneE164,
-    );
+    ]);
 
     const code = this.generateCode();
-    this.db
-      .prepare(
-        `INSERT INTO auth_otps (id, phone_e164, code_hash, channel, expires_at, attempts, created_at)
-         VALUES (?, ?, ?, ?, ?, 0, ?)`,
-      )
-      .run(
+    await this.dbs.run(
+      `INSERT INTO auth_otps (id, phone_e164, code_hash, channel, expires_at, attempts, created_at)
+       VALUES (?, ?, ?, ?, ?, 0, ?)`,
+      [
         randomUUID(),
         phoneE164,
         this.hash(code),
         channel,
         new Date(now + CODE_TTL_MS).toISOString(),
         new Date(now).toISOString(),
-      );
+      ],
+    );
 
     // Send with WhatsApp→SMS fallback. Plaintext code is passed to the sender, never persisted/logged here.
     const usedChannel = await this.deliver(phoneE164, code, locale, channel);
@@ -130,72 +127,71 @@ export class AuthService {
     const devCode = process.env.OTP_DEV_CODE ?? '000000';
     const isMock = (process.env.OTP_PROVIDER ?? 'mock') === 'mock';
 
-    const row = this.db
-      .prepare(
-        `SELECT * FROM auth_otps WHERE phone_e164=? AND consumed_at IS NULL ORDER BY created_at DESC LIMIT 1`,
-      )
-      .get(phoneE164) as OtpRow | undefined;
+    const row = await this.dbs.get<OtpRow>(
+      `SELECT * FROM auth_otps WHERE phone_e164=? AND consumed_at IS NULL ORDER BY created_at DESC LIMIT 1`,
+      [phoneE164],
+    );
     if (!row) throw new UnauthorizedException('no active code — request a new one');
 
     if (Date.now() > Date.parse(row.expires_at)) {
-      this.db.prepare('UPDATE auth_otps SET consumed_at=? WHERE id=?').run(new Date().toISOString(), row.id);
+      await this.dbs.run('UPDATE auth_otps SET consumed_at=? WHERE id=?', [new Date().toISOString(), row.id]);
       throw new UnauthorizedException('code expired, request a new one');
     }
     if (row.attempts >= MAX_VERIFY_ATTEMPTS) {
-      this.db.prepare('UPDATE auth_otps SET consumed_at=? WHERE id=?').run(new Date().toISOString(), row.id);
+      await this.dbs.run('UPDATE auth_otps SET consumed_at=? WHERE id=?', [new Date().toISOString(), row.id]);
       throw new UnauthorizedException('too many attempts, request a new code');
     }
 
     // Dev universal code accepted ONLY in mock mode (ADR-004 Decision 1).
     const matches = this.hash(code) === row.code_hash || (isMock && code === devCode);
     if (!matches) {
-      this.db.prepare('UPDATE auth_otps SET attempts=attempts+1 WHERE id=?').run(row.id);
+      await this.dbs.run('UPDATE auth_otps SET attempts=attempts+1 WHERE id=?', [row.id]);
       const remaining = MAX_VERIFY_ATTEMPTS - (row.attempts + 1);
       throw new UnauthorizedException(`incorrect code${remaining > 0 ? ` (${remaining} attempts left)` : ''}`);
     }
 
-    this.db.prepare('UPDATE auth_otps SET consumed_at=? WHERE id=?').run(new Date().toISOString(), row.id);
+    await this.dbs.run('UPDATE auth_otps SET consumed_at=? WHERE id=?', [new Date().toISOString(), row.id]);
     return this.issueSessionForPhone(phoneE164);
   }
 
   /** Creates the user + profile on first sign-in; returns access + refresh + pseudoId. */
-  private issueSessionForPhone(phoneE164: string): OtpVerifyResponse {
+  private async issueSessionForPhone(phoneE164: string): Promise<OtpVerifyResponse> {
     const now = new Date().toISOString();
-    let user = this.db.prepare('SELECT id FROM auth_users WHERE phone_e164=?').get(phoneE164) as
-      | { id: string }
-      | undefined;
+    let user = await this.dbs.get<{ id: string }>('SELECT id FROM auth_users WHERE phone_e164=?', [phoneE164]);
     let isNewUser = false;
 
     if (!user) {
       isNewUser = true;
       const id = randomUUID();
       const pseudoId = randomUUID();
-      const tx = this.db.transaction(() => {
-        this.db
-          .prepare('INSERT INTO auth_users (id, phone_e164, created_at, last_login_at) VALUES (?,?,?,?)')
-          .run(id, phoneE164, now, now);
-        this.db
-          .prepare('INSERT INTO profiles (id, pseudo_id, locale_pref, created_at) VALUES (?,?,?,?)')
-          .run(id, pseudoId, 'ar', now);
-        this.db.prepare('INSERT INTO search_quota (user_id, used_count, updated_at) VALUES (?,0,?)').run(id, now);
-        this.db.prepare('INSERT INTO subscriptions (user_id, status, updated_at) VALUES (?,?,?)').run(
+      await this.dbs.tx(async (t) => {
+        await t.run('INSERT INTO auth_users (id, phone_e164, created_at, last_login_at) VALUES (?,?,?,?)', [
           id,
-          'none',
+          phoneE164,
           now,
-        );
+          now,
+        ]);
+        await t.run('INSERT INTO profiles (id, pseudo_id, locale_pref, created_at) VALUES (?,?,?,?)', [
+          id,
+          pseudoId,
+          'ar',
+          now,
+        ]);
+        await t.run('INSERT INTO search_quota (user_id, used_count, updated_at) VALUES (?,0,?)', [id, now]);
+        await t.run('INSERT INTO subscriptions (user_id, status, updated_at) VALUES (?,?,?)', [id, 'none', now]);
       });
-      tx();
       user = { id };
     } else {
-      this.db.prepare('UPDATE auth_users SET last_login_at=? WHERE id=?').run(now, user.id);
+      await this.dbs.run('UPDATE auth_users SET last_login_at=? WHERE id=?', [now, user.id]);
     }
 
-    const profile = this.db
-      .prepare('SELECT pseudo_id, locale_pref FROM profiles WHERE id=?')
-      .get(user.id) as { pseudo_id: string; locale_pref: Locale };
+    const profile = (await this.dbs.get<{ pseudo_id: string; locale_pref: Locale }>(
+      'SELECT pseudo_id, locale_pref FROM profiles WHERE id=?',
+      [user.id],
+    ))!;
 
     const access = this.jwt.signAccess(user.id, profile.pseudo_id);
-    const refresh = this.issueRefresh(user.id);
+    const refresh = await this.issueRefresh(user.id);
     return {
       access,
       refresh,
@@ -206,38 +202,40 @@ export class AuthService {
   }
 
   /** POST /auth/refresh — rotate refresh token, mint a fresh access JWT (F-A2 biometric re-auth). */
-  refresh(refreshToken: string): { access: string; refresh: string } {
+  async refresh(refreshToken: string): Promise<{ access: string; refresh: string }> {
     const hash = this.hash(refreshToken);
-    const row = this.db
-      .prepare('SELECT id, user_id, expires_at, revoked_at FROM auth_sessions WHERE refresh_token_hash=?')
-      .get(hash) as { id: string; user_id: string; expires_at: string; revoked_at: string | null } | undefined;
+    const row = await this.dbs.get<{
+      id: string;
+      user_id: string;
+      expires_at: string;
+      revoked_at: string | null;
+    }>('SELECT id, user_id, expires_at, revoked_at FROM auth_sessions WHERE refresh_token_hash=?', [hash]);
     if (!row || row.revoked_at || Date.now() > Date.parse(row.expires_at)) {
       throw new UnauthorizedException('invalid or expired refresh token');
     }
     // Rotate: revoke old, issue new.
-    this.db.prepare('UPDATE auth_sessions SET revoked_at=? WHERE id=?').run(new Date().toISOString(), row.id);
-    const profile = this.db.prepare('SELECT pseudo_id FROM profiles WHERE id=?').get(row.user_id) as {
-      pseudo_id: string;
-    };
+    await this.dbs.run('UPDATE auth_sessions SET revoked_at=? WHERE id=?', [new Date().toISOString(), row.id]);
+    const profile = (await this.dbs.get<{ pseudo_id: string }>('SELECT pseudo_id FROM profiles WHERE id=?', [
+      row.user_id,
+    ]))!;
     const access = this.jwt.signAccess(row.user_id, profile.pseudo_id);
-    const refresh = this.issueRefresh(row.user_id);
+    const refresh = await this.issueRefresh(row.user_id);
     return { access, refresh };
   }
 
-  private issueRefresh(userId: string): string {
+  private async issueRefresh(userId: string): Promise<string> {
     const token = randomBytes(32).toString('hex');
     const now = Date.now();
-    this.db
-      .prepare(
-        'INSERT INTO auth_sessions (id, user_id, refresh_token_hash, expires_at, created_at) VALUES (?,?,?,?,?)',
-      )
-      .run(
+    await this.dbs.run(
+      'INSERT INTO auth_sessions (id, user_id, refresh_token_hash, expires_at, created_at) VALUES (?,?,?,?,?)',
+      [
         randomUUID(),
         userId,
         this.hash(token),
         new Date(now + 30 * 24 * 60 * 60 * 1000).toISOString(),
         new Date(now).toISOString(),
-      );
+      ],
+    );
     return token;
   }
 

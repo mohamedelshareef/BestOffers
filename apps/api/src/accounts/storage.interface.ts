@@ -56,3 +56,68 @@ export class LocalDiskStorage implements Storage {
     if (existsSync(full)) rmSync(full);
   }
 }
+
+/**
+ * Supabase Storage impl (STORAGE_PROVIDER=supabase). Uploads to the private `avatars` bucket at the
+ * frozen path `{userId}/avatar.<ext>` using the SERVICE-ROLE key (server-trusted; bypasses Storage
+ * RLS — the caller is already authorized by JWT). `url()` returns a short-lived SIGNED URL (bucket is
+ * private). Zero SDK: plain REST against the Storage API. Requires SUPABASE_URL + SUPABASE_SERVICE_ROLE_KEY.
+ */
+export class SupabaseStorage implements Storage {
+  private readonly logger = new Logger('SupabaseStorage');
+  private readonly bucket = process.env.SUPABASE_AVATARS_BUCKET ?? 'avatars';
+
+  private cfg(): { base: string; key: string } {
+    const base = process.env.SUPABASE_URL;
+    const key = process.env.SUPABASE_SERVICE_ROLE_KEY;
+    if (!base || !key) throw new Error('SUPABASE_URL + SUPABASE_SERVICE_ROLE_KEY required for SupabaseStorage');
+    return { base, key };
+  }
+
+  async put(userId: string, ext: string, bytes: Buffer, contentType: string): Promise<{ path: string }> {
+    assertAvatarUpload(bytes, contentType);
+    const { base, key } = this.cfg();
+    const path = `${userId}/avatar.${ext}`;
+    // upsert=true so re-uploads overwrite the user's single avatar object.
+    const res = await fetch(`${base}/storage/v1/object/${this.bucket}/${path}`, {
+      method: 'POST',
+      headers: {
+        apikey: key,
+        Authorization: `Bearer ${key}`,
+        'Content-Type': contentType,
+        'x-upsert': 'true',
+      },
+      body: bytes as any,
+    });
+    if (!res.ok) {
+      const body = await res.text().catch(() => '');
+      throw new Error(`avatar upload failed: ${res.status} ${body}`);
+    }
+    return { path };
+  }
+
+  async url(path: string): Promise<string> {
+    const { base, key } = this.cfg();
+    const res = await fetch(`${base}/storage/v1/object/sign/${this.bucket}/${path}`, {
+      method: 'POST',
+      headers: { apikey: key, Authorization: `Bearer ${key}`, 'Content-Type': 'application/json' },
+      body: JSON.stringify({ expiresIn: 3600 }),
+    });
+    if (!res.ok) throw new Error(`sign url failed: ${res.status}`);
+    const body = (await res.json()) as { signedURL: string };
+    return `${base}/storage/v1${body.signedURL}`;
+  }
+
+  async remove(path: string): Promise<void> {
+    const { base, key } = this.cfg();
+    await fetch(`${base}/storage/v1/object/${this.bucket}/${path}`, {
+      method: 'DELETE',
+      headers: { apikey: key, Authorization: `Bearer ${key}` },
+    });
+  }
+}
+
+/** Selector: STORAGE_PROVIDER=supabase → SupabaseStorage; else LocalDiskStorage (default, offline). */
+export function selectStorage(): Storage {
+  return process.env.STORAGE_PROVIDER === 'supabase' ? new SupabaseStorage() : new LocalDiskStorage();
+}

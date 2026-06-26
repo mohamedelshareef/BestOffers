@@ -1,6 +1,10 @@
 # Supabase Runtime Cutover Plan (NestJS: better-sqlite3 → pg/Supabase)
 
-> Owner: bo-dev-lead · Status: SCOPED, NOT EXECUTED · 2026-06-26
+> Owner: bo-dev-lead · Status: **EXECUTED + REAL-PROVEN 2026-06-26** (driver-selectable; SQLite stays
+>   default → 102/102 api green; `DB_DRIVER=pg`+`AUTH_MODE=supabase`+`STORAGE_PROVIDER=supabase` verified
+>   against the live project — real profile upsert, freemium quota row, JWKS ES256 token accept/reject, and
+>   avatar object all landed in Supabase. See bo-dev-lead memory + `apps/api/scripts/verify-supabase-*.mjs`,
+>   `http-authed-check.mjs`.) · 2026-06-26
 > Companion to ADR-004. The Supabase **schema is now provisioned and verified** (see this task's
 > handoff). What remains is switching the NestJS RUNTIME to talk to Supabase Postgres instead of the
 > local SQLite file. We deliberately did NOT do this now — the app stays stable (63 API + 18 mobile

@@ -214,12 +214,60 @@
   RESTART CMD: `lsof -ti :3000|xargs kill -9`; `npm run build:types && npm run build --workspace=apps/api`;
   from apps/api: `DOTENV_CONFIG_PATH=<repo>/.env LIVE_FETCH=on BILLING_PROVIDER=mock PORT=3000 node -r
   dotenv/config dist/main.js`. (GOTCHA: stale ts-node-dev squats :3000 with a mock /health — free port first.)
-- **Supabase provisioned (schema LIVE, runtime still SQLite):** project ruzthjvtlnmdkdamnuxa, Tokyo txn-pooler
-  :6543. DDL in `apps/api/src/db/postgres/` (0001 catalog, 0002 accounts/billing keyed to auth.users uuid +
-  on_auth_user_created trigger, 0003 RLS). Runner `npm run db:supabase:push` (idempotent, reads REPO-ROOT
-  .env). avatars bucket live (private, per-uid RLS). E2E 10/10 (self-cleaning). Cutover plan in
-  `team/architecture/supabase-runtime-cutover-plan.md` (NOT executed). GOTCHA: txn-pooler swaps backends
-  between statements → wrap set_config(request.jwt.claims,LOCAL)+SET LOCAL ROLE+query in ONE txn to test RLS.
+- **Supabase provisioned (schema LIVE):** project ruzthjvtlnmdkdamnuxa, Tokyo txn-pooler :6543. DDL in
+  `apps/api/src/db/postgres/` (0001 catalog, 0002 accounts/billing keyed to auth.users uuid +
+  on_auth_user_created trigger, 0003 RLS). Runner `npm run db:supabase:push` (idempotent, REPO-ROOT .env).
+  avatars bucket live (private, per-uid RLS). JWKS uses **ES256** (P-256) asymmetric keys (NOT HS256).
+
+## SUPABASE RUNTIME CUTOVER — DONE + REAL-PROVEN (2026-06-26, additive, default stays SQLite)
+- **Tests: 102/102 api green on SQLite default · mobile untouched (22).** App boots keyless in default mode
+  (`db:sqlite,auth:local,storage:local`) AND boots clean with `DB_DRIVER=pg AUTH_MODE=supabase STORAGE_PROVIDER=supabase`.
+- **Async DB port** `apps/api/src/db/db.port.ts` (`Db`: get/all/run/tx + `rewritePlaceholders` ?→$n). Drivers:
+  `sqlite-db.ts` (SqliteDb wraps better-sqlite3 sync→resolved Promise; `.handle` still exposed for specs;
+  RETURNING via .get) and `pg-db.ts` (PgDb, **pg dynamic-imported**, `ssl:{rejectUnauthorized:false}`,
+  pool max 8). `db.service.ts` is now a DRIVER-SELECTING FACADE implementing `Db` (DB_DRIVER=pg|sqlite,
+  default sqlite); lazily opens the pg.Pool on first query (ctor stays sync so `new DbService()` in specs +
+  Nest DI unchanged); `.db` (sync handle) ONLY valid in sqlite mode.
+- **PgDb TYPE NORMALIZATION (read side, back to SQLite-shaped expectations the services encode):**
+  boolean→0/1, Date→ISO string, jsonb(object)→JSON string, int8/count→number, purely-numeric short string→
+  number. **WRITE side gotcha (PROVEN):** Postgres ACCEPTS integer PARAM 1/0 for a boolean column (pg binds
+  it ok) — but a SQL LITERAL `=1` FAILS ("type integer"). Only literal that works cross-dialect is `=true`.
+  So changed profile.service `email_verified=1` literal → param `?,[…,1,…]`. better-sqlite3 takes number 1 fine.
+  Do NOT pass JS booleans as better-sqlite3 params (it throws) — pass 0/1 ints everywhere.
+- **TXN-POOLER (:6543) has NO session state:** PgDb.tx() checks out ONE pooled client for the whole
+  BEGIN…COMMIT (any SET LOCAL/GUC must live inside one tx). No named/server-side prepared stmts.
+- **Refactor (mechanical, all 5 services → `await this.dbs.get/all/run/tx(sql, params[])`):** auth.service
+  (issueSessionForPhone/refresh/issueRefresh now async; tx() for first-signin 4-insert), profile.service
+  (getProfile/updateProfile/applyEmailChange/verifyEmail async), quota.service, billing.service,
+  mock+stripe billing providers. Controllers updated to await/return Promise (auth.refresh, accounts.* ).
+  **Specs:** quota/billing already awaited (untouched); profile.spec + auth.spec edited to `await`/`rejects`
+  (count unchanged at 102; specs still seed/inspect via sync `dbs.db.prepare` in sqlite mode).
+- **AUTH JWKS** (`auth/supabase-jwks.ts`, ZERO deps, Node crypto + fetch): AUTH_MODE=supabase verifies real
+  Supabase access tokens via `<URL>/auth/v1/.well-known/jwks.json` (cached 10min by kid). Supports RS256/
+  **ES256**(ieee-p1363→DER via dsaEncoding)/EdDSA; REJECTS HS256/keyless (forged) tokens. JwtService gained
+  async `verifyAccessAsync()` (dispatches by AUTH_MODE; default=local HS256, unchanged sync `verifyAccess`).
+  **AuthGuard is now ASYNC** (`canActivate→Promise<boolean>`), injects DbService; Supabase token has NO
+  pseudo_id claim → guard resolves sub→profiles.pseudo_id (1 query). PROVEN: real ES256 token ACCEPTED
+  (sub matches), forged HS256 REJECTED, signature-tampered REJECTED.
+- **STORAGE** `accounts/storage.interface.ts` `SupabaseStorage` (STORAGE_PROVIDER=supabase, REST not SDK,
+  service-role): put→`avatars/{uid}/avatar.<ext>` x-upsert, url→signed 1h, remove→DELETE. `selectStorage()`
+  selector wired in accounts.module (default LocalDiskStorage).
+- **REAL PROOF (live project, self-cleaning harnesses, NOT just builds):**
+  - `apps/api/scripts/verify-supabase-runtime.mjs` — admin-creates auth.users (trigger→profiles+quota), then
+    through the COMPILED dist services in pg mode: ProfileService.updateProfile wrote "محمد الشريف"+jsonb+bool
+    biometric → independent service-role read confirms persisted; QuotaService freemium 5-allow/6th-PAYWALL →
+    `search_quota.used_count=5` in Supabase; 25 concurrent at cap → 0 allowed (race-safe on PG); SupabaseStorage
+    PNG upload → signed-URL fetch 200 + storage.objects row present.
+  - `apps/api/scripts/verify-supabase-jwks.mjs` — mints a REAL ES256 token (password sign-in) → accept/reject proof.
+  - `apps/api/scripts/http-authed-check.mjs` — booted REAL Nest app on :3201 (DB_DRIVER=pg AUTH_MODE=supabase),
+    `GET /me`→200 (profile from Supabase, pseudoId guard-resolved), `GET /me/quota`→200, no/garbage token→401.
+- **RUN CMD (Supabase mode):** `cd apps/api && DOTENV_CONFIG_PATH=<repo>/.env DB_DRIVER=pg AUTH_MODE=supabase
+  STORAGE_PROVIDER=supabase BILLING_PROVIDER=mock PORT=3000 node -r dotenv/config dist/main.js` (build first:
+  `npm run build:types && npm run build --workspace=apps/api`). `/health.providers.db/auth/storage` reflect mode.
+- **NOT cut over (intentional, mock/local still):** OTP request/verify (auth_users/auth_otps/auth_sessions
+  DON'T exist in PG — Supabase Auth owns identity; in pg mode auth goes via Supabase directly, our local OTP
+  flow is sqlite/local-only). Stripe billing still mock (StripeBillingProvider config-ready). main.ts rawBody
+  for real Stripe webhook still TODO. SUPABASE_JWKS_URL/JWT_ISSUER not in .env → derived from SUPABASE_URL.
 - **RENDER-FIX (app RENDERS):** root cause = duplicate React in web bundle → null hook dispatcher. FIX =
   `apps/mobile/metro.config.js` (LOAD-BEARING, do NOT delete) pins react/react-dom/jsx-runtime to mobile copy.
   2nd bug: `src/api/config.ts` passed bare global `fetch` → `Illegal invocation`; fixed with boundFetch.

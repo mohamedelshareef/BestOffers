@@ -22,13 +22,16 @@ export class AccountsController {
   constructor(private readonly profiles: ProfileService) {}
 
   @Get()
-  me(@Req() req: AuthedRequest): Profile {
+  me(@Req() req: AuthedRequest): Promise<Profile> {
     return this.profiles.getProfile(req.auth!.userId);
   }
 
   @Patch()
-  update(@Req() req: AuthedRequest, @Body() body: ProfileUpdate): Profile & { emailVerifyToken?: string } {
-    const profile = this.profiles.updateProfile(req.auth!.userId, body);
+  async update(
+    @Req() req: AuthedRequest,
+    @Body() body: ProfileUpdate,
+  ): Promise<Profile & { emailVerifyToken?: string }> {
+    const profile = await this.profiles.updateProfile(req.auth!.userId, body);
     // Dev/mock: surface the verify token so the flow is completable with no mail provider.
     const token = body.email ? this.profiles.lastEmailToken() : undefined;
     return token ? { ...profile, emailVerifyToken: token } : profile;
@@ -43,17 +46,17 @@ export class AccountsController {
     const ext = EXT_BY_MIME[body.contentType] ?? 'bin';
     const bytes = Buffer.from(body.base64, 'base64');
     const { path } = await this.profiles.storageRef.put(userId, ext, bytes, body.contentType);
-    this.profiles.updateProfile(userId, { avatarUrl: path });
+    await this.profiles.updateProfile(userId, { avatarUrl: path });
     return { avatarUrl: path };
   }
 
   @Post('email-verify')
-  verifyEmail(@Req() req: AuthedRequest, @Body() body: { token: string }): Profile {
+  verifyEmail(@Req() req: AuthedRequest, @Body() body: { token: string }): Promise<Profile> {
     return this.profiles.verifyEmail(req.auth!.userId, body.token);
   }
 
   @Get('email-verify')
-  verifyEmailGet(@Req() req: AuthedRequest, @Query('token') token: string): Profile {
+  verifyEmailGet(@Req() req: AuthedRequest, @Query('token') token: string): Promise<Profile> {
     return this.profiles.verifyEmail(req.auth!.userId, token);
   }
 }

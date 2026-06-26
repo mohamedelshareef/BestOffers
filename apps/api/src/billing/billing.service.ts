@@ -14,10 +14,6 @@ export class BillingService {
     @Inject(BILLING_PROVIDER) private readonly provider: BillingProvider,
   ) {}
 
-  private get db() {
-    return this.dbs.db;
-  }
-
   async checkout(userId: string): Promise<{ url: string }> {
     const { customerId } = await this.provider.getOrCreateCustomer(userId);
     return this.provider.createCheckoutSession(userId, customerId);
@@ -30,28 +26,28 @@ export class BillingService {
     // When a webhook omits current_period_end (e.g. a cancel event that doesn't restate it), KEEP the
     // existing paid-through date rather than nulling it — that date governs canceled-within-period
     // premium access (D1-1). COALESCE(excluded, existing) preserves it on UPDATE.
-    this.db
-      .prepare(
-        `INSERT INTO subscriptions (user_id, status, current_period_end, updated_at)
-         VALUES (?,?,?,?)
-         ON CONFLICT(user_id) DO UPDATE SET
-           status=excluded.status,
-           current_period_end=COALESCE(excluded.current_period_end, subscriptions.current_period_end),
-           updated_at=excluded.updated_at`,
-      )
-      .run(
+    await this.dbs.run(
+      `INSERT INTO subscriptions (user_id, status, current_period_end, updated_at)
+       VALUES (?,?,?,?)
+       ON CONFLICT(user_id) DO UPDATE SET
+         status=excluded.status,
+         current_period_end=COALESCE(excluded.current_period_end, subscriptions.current_period_end),
+         updated_at=excluded.updated_at`,
+      [
         result.userId,
         result.status,
         result.currentPeriodEnd ? result.currentPeriodEnd.toISOString() : null,
         new Date().toISOString(),
-      );
+      ],
+    );
     return { applied: true };
   }
 
   async status(userId: string): Promise<BillingStatus> {
-    const row = this.db
-      .prepare('SELECT status, current_period_end FROM subscriptions WHERE user_id=?')
-      .get(userId) as { status: SubStatus; current_period_end: string | null } | undefined;
+    const row = await this.dbs.get<{ status: SubStatus; current_period_end: string | null }>(
+      'SELECT status, current_period_end FROM subscriptions WHERE user_id=?',
+      [userId],
+    );
     const status: SubStatus = row?.status ?? 'none';
     const premium = await this.provider.isPremium(userId);
     return { status, premium, currentPeriodEnd: row?.current_period_end ?? null };

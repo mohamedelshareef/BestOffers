@@ -87,11 +87,11 @@ describe('AuthService (OTP, mock)', () => {
   it('refresh rotates the token and mints a fresh access JWT', async () => {
     await svc.requestOtp(PHONE, 'en');
     const first = await svc.verifyOtp(PHONE, '000000');
-    const rotated = svc.refresh(first.refresh);
+    const rotated = await svc.refresh(first.refresh);
     expect(rotated.access.split('.')).toHaveLength(3);
     expect(rotated.refresh).not.toBe(first.refresh);
     // Old refresh is revoked → reuse fails.
-    expect(() => svc.refresh(first.refresh)).toThrow(/invalid or expired/);
+    await expect(svc.refresh(first.refresh)).rejects.toThrow(/invalid or expired/);
   });
 
   it('never stores the plaintext code (only a hash)', async () => {

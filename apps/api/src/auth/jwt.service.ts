@@ -21,6 +21,24 @@ export class JwtService {
   private readonly secret = process.env.JWT_SECRET ?? 'dev-mock-jwt-secret-not-for-prod';
   private readonly accessTtlSec = 60 * 60; // ~1h (ADR-004 §Security)
 
+  /** AUTH_MODE: 'local' (HS256 mock, DEFAULT) | 'supabase' (verify Supabase access tokens via JWKS). */
+  private get mode(): 'local' | 'supabase' {
+    return process.env.AUTH_MODE === 'supabase' ? 'supabase' : 'local';
+  }
+
+  /**
+   * Async verification used by the AuthGuard. In 'local' mode this is the HS256 path below; in
+   * 'supabase' mode it verifies a real Supabase access token via JWKS (dynamic import keeps the
+   * crypto/fetch path out of the local hot path). Returns the same claims shape either way.
+   */
+  async verifyAccessAsync(token: string): Promise<AccessClaims> {
+    if (this.mode === 'supabase') {
+      const { verifySupabaseToken } = await import('./supabase-jwks');
+      return verifySupabaseToken(token);
+    }
+    return this.verifyAccess(token);
+  }
+
   private b64url(input: Buffer | string): string {
     return Buffer.from(input)
       .toString('base64')

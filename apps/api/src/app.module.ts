@@ -14,6 +14,9 @@ class HealthController {
       service: 'bestoffers-api',
       slice: 'S2-Phase2a accounts/billing/freemium (mock)',
       providers: {
+        db: process.env.DB_DRIVER === 'pg' ? 'pg' : 'sqlite',
+        auth: process.env.AUTH_MODE === 'supabase' ? 'supabase' : 'local',
+        storage: process.env.STORAGE_PROVIDER === 'supabase' ? 'supabase' : 'local',
         otp: process.env.OTP_PROVIDER ?? 'mock',
         billing: process.env.BILLING_PROVIDER ?? 'mock',
         claude: process.env.CLAUDE_PROVIDER === 'anthropic' ? 'anthropic' : 'mock',

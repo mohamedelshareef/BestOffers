@@ -17,10 +17,6 @@ export class StripeBillingProvider implements BillingProvider {
 
   constructor(private readonly dbs: DbService) {}
 
-  private get db() {
-    return this.dbs.db;
-  }
-
   private async stripe(): Promise<any> {
     if (this.client) return this.client;
     const key = process.env.STRIPE_SECRET_KEY;
@@ -32,19 +28,19 @@ export class StripeBillingProvider implements BillingProvider {
   }
 
   async getOrCreateCustomer(userId: string): Promise<{ customerId: string }> {
-    const row = this.db.prepare('SELECT stripe_customer_id FROM subscriptions WHERE user_id=?').get(userId) as
-      | { stripe_customer_id: string | null }
-      | undefined;
+    const row = await this.dbs.get<{ stripe_customer_id: string | null }>(
+      'SELECT stripe_customer_id FROM subscriptions WHERE user_id=?',
+      [userId],
+    );
     if (row?.stripe_customer_id) return { customerId: row.stripe_customer_id };
     const stripe = await this.stripe();
     const customer = await stripe.customers.create({ metadata: { user_id: userId } });
-    this.db
-      .prepare(
-        `INSERT INTO subscriptions (user_id, stripe_customer_id, status, updated_at)
-         VALUES (?,?,'none',?)
-         ON CONFLICT(user_id) DO UPDATE SET stripe_customer_id=excluded.stripe_customer_id, updated_at=excluded.updated_at`,
-      )
-      .run(userId, customer.id, new Date().toISOString());
+    await this.dbs.run(
+      `INSERT INTO subscriptions (user_id, stripe_customer_id, status, updated_at)
+       VALUES (?,?,'none',?)
+       ON CONFLICT(user_id) DO UPDATE SET stripe_customer_id=excluded.stripe_customer_id, updated_at=excluded.updated_at`,
+      [userId, customer.id, new Date().toISOString()],
+    );
     return { customerId: customer.id };
   }
 
@@ -84,9 +80,10 @@ export class StripeBillingProvider implements BillingProvider {
   }
 
   async isPremium(userId: string): Promise<boolean> {
-    const row = this.db
-      .prepare('SELECT status, current_period_end FROM subscriptions WHERE user_id=?')
-      .get(userId) as { status: SubStatus; current_period_end: string | null } | undefined;
+    const row = await this.dbs.get<{ status: SubStatus; current_period_end: string | null }>(
+      'SELECT status, current_period_end FROM subscriptions WHERE user_id=?',
+      [userId],
+    );
     return isPremiumStatus(row?.status, row?.current_period_end);
   }
 

@@ -30,7 +30,7 @@ export class AuthController {
   }
 
   @Post('refresh')
-  refresh(@Body() body: OtpRefreshBody): { access: string; refresh: string } {
+  refresh(@Body() body: OtpRefreshBody): Promise<{ access: string; refresh: string }> {
     return this.auth.refresh(body.refresh);
   }
 }

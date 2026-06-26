@@ -21,10 +21,6 @@ export class QuotaService {
     private readonly billing: BillingService,
   ) {}
 
-  private get db() {
-    return this.dbs.db;
-  }
-
   /**
    * Try to consume one free search. Returns:
    *   { allowed:true, premium:true }            → subscriber bypass
@@ -33,18 +29,18 @@ export class QuotaService {
    */
   async tryConsume(userId: string): Promise<{ allowed: boolean; premium: boolean; used: number }> {
     if (await this.billing.isPremium(userId)) {
-      return { allowed: true, premium: true, used: this.usedCount(userId) };
+      return { allowed: true, premium: true, used: await this.usedCount(userId) };
     }
-    this.ensureRow(userId);
+    await this.ensureRow(userId);
 
-    // ATOMIC conditional increment. better-sqlite3 supports UPDATE … RETURNING (SQLite ≥3.35).
-    const row = this.db
-      .prepare(
-        `UPDATE search_quota SET used_count = used_count + 1, updated_at = ?
-         WHERE user_id = ? AND used_count < ?
-         RETURNING used_count`,
-      )
-      .get(new Date().toISOString(), userId, FREE_SEARCH_LIMIT) as { used_count: number } | undefined;
+    // ATOMIC conditional increment via a single conditional UPDATE … RETURNING — the DB enforces the
+    // cap with no read-then-write race (SQLite ≥3.35 and Postgres both support RETURNING).
+    const row = await this.dbs.run<{ used_count: number }>(
+      `UPDATE search_quota SET used_count = used_count + 1, updated_at = ?
+       WHERE user_id = ? AND used_count < ?
+       RETURNING used_count`,
+      [new Date().toISOString(), userId, FREE_SEARCH_LIMIT],
+    );
 
     if (!row) {
       return { allowed: false, premium: false, used: FREE_SEARCH_LIMIT };
@@ -54,21 +50,21 @@ export class QuotaService {
 
   async status(userId: string): Promise<QuotaStatus> {
     const premium = await this.billing.isPremium(userId);
-    return { used: this.usedCount(userId), limit: FREE_SEARCH_LIMIT, premium };
+    return { used: await this.usedCount(userId), limit: FREE_SEARCH_LIMIT, premium };
   }
 
-  private usedCount(userId: string): number {
-    const row = this.db.prepare('SELECT used_count FROM search_quota WHERE user_id=?').get(userId) as
-      | { used_count: number }
-      | undefined;
+  private async usedCount(userId: string): Promise<number> {
+    const row = await this.dbs.get<{ used_count: number }>(
+      'SELECT used_count FROM search_quota WHERE user_id=?',
+      [userId],
+    );
     return row?.used_count ?? 0;
   }
 
-  private ensureRow(userId: string): void {
-    this.db
-      .prepare(
-        'INSERT INTO search_quota (user_id, used_count, updated_at) VALUES (?,0,?) ON CONFLICT(user_id) DO NOTHING',
-      )
-      .run(userId, new Date().toISOString());
+  private async ensureRow(userId: string): Promise<void> {
+    await this.dbs.run(
+      'INSERT INTO search_quota (user_id, used_count, updated_at) VALUES (?,0,?) ON CONFLICT(user_id) DO NOTHING',
+      [userId, new Date().toISOString()],
+    );
   }
 }

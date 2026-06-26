@@ -34,18 +34,14 @@ export class ProfileService {
     @Inject(STORAGE) private readonly storage: Storage,
   ) {}
 
-  private get db() {
-    return this.dbs.db;
-  }
-
-  getProfile(userId: string): Profile {
-    const row = this.db.prepare('SELECT * FROM profiles WHERE id=?').get(userId) as ProfileRow | undefined;
+  async getProfile(userId: string): Promise<Profile> {
+    const row = await this.dbs.get<ProfileRow>('SELECT * FROM profiles WHERE id=?', [userId]);
     if (!row) throw new NotFoundException('profile not found');
     return this.toProfile(row);
   }
 
-  updateProfile(userId: string, patch: ProfileUpdate): Profile {
-    const existing = this.db.prepare('SELECT * FROM profiles WHERE id=?').get(userId) as ProfileRow | undefined;
+  async updateProfile(userId: string, patch: ProfileUpdate): Promise<Profile> {
+    const existing = await this.dbs.get<ProfileRow>('SELECT * FROM profiles WHERE id=?', [userId]);
     if (!existing) throw new NotFoundException('profile not found');
 
     const sets: string[] = [];
@@ -59,7 +55,7 @@ export class ProfileService {
     }
 
     if (patch.email !== undefined) {
-      this.applyEmailChange(userId, existing, patch.email, sets, vals);
+      await this.applyEmailChange(userId, existing, patch.email, sets, vals);
     }
 
     if (patch.avatarUrl !== undefined) {
@@ -94,18 +90,18 @@ export class ProfileService {
     }
 
     if (sets.length > 0) {
-      this.db.prepare(`UPDATE profiles SET ${sets.join(', ')} WHERE id=?`).run(...vals, userId);
+      await this.dbs.run(`UPDATE profiles SET ${sets.join(', ')} WHERE id=?`, [...vals, userId]);
     }
     return this.getProfile(userId);
   }
 
-  private applyEmailChange(
+  private async applyEmailChange(
     userId: string,
     existing: ProfileRow,
     email: string | null,
     sets: string[],
     vals: unknown[],
-  ): void {
+  ): Promise<void> {
     if (email === null || email.trim() === '') {
       // Clear email → cancels any pending verification (F-A1 edge case).
       sets.push('email=?', 'email_verified=?', 'email_pending=?', 'email_verify_token_hash=?', 'email_verify_expires_at=?');
@@ -117,9 +113,10 @@ export class ProfileService {
     if (normalized === existing.email && existing.email_verified) return; // no-op, already verified
 
     // Uniqueness across accounts (F-A1 edge: do not leak which account).
-    const clash = this.db
-      .prepare('SELECT id FROM profiles WHERE email=? AND id<>?')
-      .get(normalized, userId) as { id: string } | undefined;
+    const clash = await this.dbs.get<{ id: string }>('SELECT id FROM profiles WHERE email=? AND id<>?', [
+      normalized,
+      userId,
+    ]);
     if (clash) throw new ConflictException('email already in use');
 
     // New/changed email → store as pending, keep prior verified email effective (F-A1 AC-4).
@@ -136,12 +133,15 @@ export class ProfileService {
   }
 
   /** GET /me/email-verify?token= — completes re-verification (F-A1 AC-4/5/6). */
-  verifyEmail(userId: string, token: string): Profile {
-    const row = this.db
-      .prepare('SELECT email_pending, email_verify_token_hash, email_verify_expires_at FROM profiles WHERE id=?')
-      .get(userId) as
-      | { email_pending: string | null; email_verify_token_hash: string | null; email_verify_expires_at: string | null }
-      | undefined;
+  async verifyEmail(userId: string, token: string): Promise<Profile> {
+    const row = await this.dbs.get<{
+      email_pending: string | null;
+      email_verify_token_hash: string | null;
+      email_verify_expires_at: string | null;
+    }>(
+      'SELECT email_pending, email_verify_token_hash, email_verify_expires_at FROM profiles WHERE id=?',
+      [userId],
+    );
     if (!row || !row.email_pending || !row.email_verify_token_hash) {
       throw new BadRequestException('no pending email verification');
     }
@@ -151,11 +151,12 @@ export class ProfileService {
     if (createHash('sha256').update(token).digest('hex') !== row.email_verify_token_hash) {
       throw new BadRequestException('invalid verification token');
     }
-    this.db
-      .prepare(
-        'UPDATE profiles SET email=?, email_verified=1, email_pending=NULL, email_verify_token_hash=NULL, email_verify_expires_at=NULL WHERE id=?',
-      )
-      .run(row.email_pending, userId);
+    // email_verified set via a bind param (1) — Postgres coerces an integer PARAM 1→true on a boolean
+    // column (a literal `=1` would NOT; only params/`true` work cross-dialect). SQLite stores 1.
+    await this.dbs.run(
+      'UPDATE profiles SET email=?, email_verified=?, email_pending=NULL, email_verify_token_hash=NULL, email_verify_expires_at=NULL WHERE id=?',
+      [row.email_pending, 1, userId],
+    );
     return this.getProfile(userId);
   }
 
