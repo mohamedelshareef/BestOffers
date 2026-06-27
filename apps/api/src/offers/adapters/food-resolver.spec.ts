@@ -161,6 +161,34 @@ describe('FoodOfferResolver (ADR-005 Slice F-1)', () => {
     expect(res.length).toBeLessThanOrEqual(3); // never a 274-item dump
   });
 
+  // ── RC-1: McDonald's vendor routing. Real Talabat outlet slugs carry branch-id/area suffixes
+  // ("mcdonalds1", "mcdonalds-1800059-bairaq-mall"); the query token "mcdonalds" must still flip the
+  // query to RESTAURANT mode (whole menu) via the brand-prefix slug match. ──
+  it('"mcdonalds" matches the real outlet slug "mcdonalds1" → whole-menu vendor mode (RC-1)', async () => {
+    class FakeMcd implements ProviderAdapter {
+      providerId = 'prov_talabat'; providerName = 'Talabat'; sector = 'food' as const;
+      tier = 'http' as const; enabled = true;
+      async discover(_q: DiscoveryQuery, _c: FetchCtx): Promise<ProductRef[]> {
+        return [{ url: 'menu#slug=mcdonalds1', handle: 'mcdonalds1', providerSkuRef: '23302' }];
+      }
+      async fetch(ref: ProductRef): Promise<RawPage> { return { url: ref.url, json: {}, fetchedAt: 'T' }; }
+      async extract(): Promise<NormalizedOffer[]> {
+        return [
+          mk('Big Mac — Mcdonalds', 'Burgers', 1500),
+          mk('Golden McFlurry — Mcdonalds', 'Desserts', 1250),
+          mk('Fries — Mcdonalds', 'Sides', 500),
+        ];
+      }
+      health(): AdapterHealth { return { lastOkAt: null, consecutiveFailures: 0 }; }
+    }
+    const r = new FoodOfferResolver([new FakeMcd()], new InMemoryOfferCache());
+    const res = await r.resolve({ category: 'food', model: 'mcdonalds', constraints: {} });
+    const names = res.map((o) => o.sku.canonicalName);
+    expect(names).toContain('Big Mac — Mcdonalds');
+    expect(names).toContain('Golden McFlurry — Mcdonalds'); // whole menu kept (vendor query), not dish-filtered
+    expect(res.length).toBe(3);
+  });
+
   it('kill-switch (enabled=false) yields zero offers; a failing adapter degrades to partial []', async () => {
     const off = new FakeTalabat(); off.enabled = false;
     expect(await new FoodOfferResolver([off], new InMemoryOfferCache()).resolve(intent)).toHaveLength(0);

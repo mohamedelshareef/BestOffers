@@ -126,9 +126,13 @@ export class FoodOfferResolver {
     if (tokens.length === 0) return false;
     return refs.some((ref) => {
       const slug = normalizeFoodText((ref.handle ?? '').replace(/-/g, ' '));
-      // Whole-token slug match (not a loose substring) so "tikka" doesn't match "chicken".
+      // Whole-token slug match (not a loose substring) so "tikka" doesn't match "chicken". A brand token
+      // also matches a slug token that STARTS with it, so "mcdonalds" hits the real Talabat outlet slugs
+      // "mcdonalds1" / "mcdonalds 1800059 bairaq mall" (branch-id/area suffixes) — a true vendor match.
       const slugTokens = slug.split(' ');
-      return tokens.some((t) => slugTokens.includes(t));
+      return tokens.some(
+        (t) => slugTokens.includes(t) || (t.length >= 4 && slugTokens.some((st) => st.startsWith(t))),
+      );
     });
   }
 

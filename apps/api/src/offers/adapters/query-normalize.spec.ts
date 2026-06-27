@@ -68,7 +68,7 @@ describe('query-normalize (C1+C2: AR → EN + typo correction before provider se
       ['كنافة نابلسية', 'kunafa'],
       ['كرك', 'karak tea'],
       ['سلطة', 'salad'],
-      ['ماكدونالدز', 'mcdonalds'],
+      ['ماكدونالدز', 'mcdonald'],
       ['دجاج مقلي', 'fried chicken'],
       ['كيكه شوكولاته', 'chocolate cake'],
       ['فطور صباحي', 'breakfast'],
@@ -228,5 +228,26 @@ describe('food C3 — rice-pudding never leaks into a savory-rice query', () => 
     const out = filterDishesByQuery(menu, 'rice', false, { unmatchedEmpty: true });
     expect(out.some((d) => /Rice Pudding/i.test(d.title))).toBe(false);
     expect(out.some((d) => /Biryani/i.test(d.title))).toBe(true);
+  });
+});
+
+describe('RC-1/RC-2 — remaining food subtype/vendor + AR air-fryer normalization', () => {
+  it('RC-2: AR "air fryer" (قلاية هوائية) maps to the EN "air fryer" the catalog indexes', () => {
+    expect(normalizeProviderQuery('قلاية هوائية', 'electronics')).toBe('air fryer');
+    expect(normalizeProviderQuery('قلايه هوائيه', 'electronics')).toBe('air fryer');
+  });
+
+  it('RC-1: McDonald\'s AR/EN both route to the provider-indexed "mcdonald" stem', () => {
+    // Talabat restaurant search only matches the SINGULAR stem; "mcdonalds"/"ماك" return nothing.
+    expect(normalizeProviderQuery('ماكدونالدز', 'food')).toBe('mcdonald');
+    expect(normalizeProviderQuery('mcdonalds', 'food')).toBe('mcdonald');
+  });
+
+  it('RC-1: food subtypes (ice cream / donuts / karak / breakfast) normalize AR→EN', () => {
+    expect(normalizeProviderQuery('آيس كريم', 'food')).toBe('ice cream');
+    expect(normalizeProviderQuery('آيسكريم', 'food')).toBe('ice cream');
+    expect(normalizeProviderQuery('دونتس', 'food')).toBe('donuts');
+    expect(normalizeProviderQuery('كرك', 'food')).toBe('karak tea');
+    expect(normalizeProviderQuery('فطور صباحي', 'food')).toBe('breakfast');
   });
 });

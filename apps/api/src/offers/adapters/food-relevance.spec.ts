@@ -202,3 +202,79 @@ describe('food-relevance (bug fix: "rice" returns random food)', () => {
     });
   });
 });
+
+describe('RC-1 — food subtype dish queries keep their real dishes (ice cream / donuts / karak / breakfast)', () => {
+  it('"ice cream" keeps ice-cream dishes, drops unrelated', () => {
+    const menu: DishCandidate[] = [
+      { title: 'Vanilla Ice Cream — Vermilion', category: 'Ice Cream' },
+      { title: 'Chocolate Sundae — Vermilion', category: 'Ice Cream' },
+      { title: 'Cheeseburger — Vermilion', category: 'Burgers' },
+    ];
+    const out = filterDishesByQuery(menu, 'ice cream', false, { unmatchedEmpty: true });
+    expect(out.length).toBeGreaterThan(0);
+    expect(out.some((d) => /Ice Cream|Sundae/i.test(d.title))).toBe(true);
+    expect(out.some((d) => /Cheeseburger/i.test(d.title))).toBe(false);
+  });
+
+  it('"donuts" keeps donut dishes', () => {
+    const menu: DishCandidate[] = [
+      { title: 'Glazed Donut — Dunkin', category: 'Donuts' },
+      { title: 'Iced Latte — Dunkin', category: 'Drinks' },
+    ];
+    const out = filterDishesByQuery(menu, 'donuts', false, { unmatchedEmpty: true });
+    expect(out.some((d) => /Donut/i.test(d.title))).toBe(true);
+  });
+
+  it('"karak tea" keeps karak/tea items (F073)', () => {
+    const menu: DishCandidate[] = [
+      { title: 'Special Karak — Karak Hut', category: 'Tea' },
+      { title: 'Chicken Sandwich — Karak Hut', category: 'Food' },
+    ];
+    const out = filterDishesByQuery(menu, 'karak tea', false, { unmatchedEmpty: true });
+    expect(out.some((d) => /Karak/i.test(d.title))).toBe(true);
+    expect(out.some((d) => /Chicken Sandwich/i.test(d.title))).toBe(false);
+  });
+
+  it('"breakfast" keeps breakfast dishes', () => {
+    const menu: DishCandidate[] = [
+      { title: 'Big Breakfast Plate — Breakfast Club', category: 'Breakfast' },
+      { title: 'Pancakes Stack — Breakfast Club', category: 'Breakfast' },
+      { title: 'Steak Dinner — Breakfast Club', category: 'Mains' },
+    ];
+    const out = filterDishesByQuery(menu, 'breakfast', false, { unmatchedEmpty: true });
+    expect(out.some((d) => /Breakfast|Pancakes/i.test(d.title))).toBe(true);
+    expect(out.some((d) => /Steak/i.test(d.title))).toBe(false);
+  });
+});
+
+describe('RC-3 — exact-intent ranking puts the on-intent dish first', () => {
+  it('"كيك" → normalized "cake" ranks a cake above cookie/mousse siblings', () => {
+    // The resolver normalizes كيك→cake (normalizeProviderQuery) BEFORE filtering, so the filter receives
+    // the EN canonical term — assert on that real call shape.
+    const menu: DishCandidate[] = [
+      { title: 'Chocolate Cookie — Layers', category: 'Dessert' },
+      { title: 'Mango Mousse — Layers', category: 'Dessert' },
+      { title: 'Red Velvet Cake — Layers', category: 'Dessert' },
+    ];
+    const out = filterDishesByQuery(menu, 'cake', false, { unmatchedEmpty: true });
+    expect(out[0].title).toMatch(/Cake/i); // exact-intent cake first, siblings kept below
+    expect(out.length).toBe(3);
+  });
+
+  it('"seafood platter" ranks seafood above a vegetable platter (F059)', () => {
+    const menu: DishCandidate[] = [
+      { title: 'Vegetable Platter — Mais', category: 'Platters' },
+      { title: 'Seafood Platter — Mais', category: 'Seafood' },
+    ];
+    const out = filterDishesByQuery(menu, 'seafood platter', false, { unmatchedEmpty: true });
+    expect(out[0].title).toMatch(/Seafood/i);
+  });
+
+  it('scoreDish gives an exact-intent dish a higher score than a same-group sibling', () => {
+    const terms = expandFoodQuery('cake').terms;
+    const core = new Set(['cake']);
+    const exact = scoreDish({ title: 'Red Velvet Cake', category: 'Dessert' }, terms, core);
+    const sibling = scoreDish({ title: 'Chocolate Cookie', category: 'Dessert' }, terms, core);
+    expect(exact).toBeGreaterThan(sibling);
+  });
+});

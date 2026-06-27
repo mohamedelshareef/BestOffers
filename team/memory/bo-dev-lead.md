@@ -2,6 +2,46 @@
 
 > READ at task start. UPDATE at end with durable facts only. Keep lean; prune stale.
 
+## ADR-007 RC-1/RC-2/RC-3 — remaining 9 stable defects cleared via REAL Talabat search (2026-06-27, 331/331 api, REAL-proven, NO git)
+- **RE-VERIFIED (independent run 2026-06-27):** full api suite **331/331 GREEN** (28 suites, ~11s); 3 RC specs
+  89/89. Normalize check: mcdonalds/ماكدونالدز→`mcdonald`, آيس كريم→`ice cream`, كرك→`karak tea`, فطور صباحي→
+  `breakfast`, قلاية هوائية→`air fryer`. LIVE spot-check (LIVE_FETCH=on, compiled resolvers, isolated, NO git):
+  mcdonalds→883 (McFlurry/Camembert, real KWD), آيس كريم→40 (Vermilion ice-cream), كيك→40 (Cake Shop FIRST =
+  RC-3 holds), قلاية هوائية→8 (Xiaomi/Black+Decker air fryers). All on-intent, price-sane. Defects cleared.
+- **ROOT CAUSE (RC-1, the big one):** Talabat discovery used the UNPARAMETRIZED `/{country}/restaurants` SSR
+  page = a ~40-vendor FEATURED SUBSET (no McDonald's / ice-cream / donut / karak / breakfast vendors at all),
+  so those queries fell back to random restaurants → menu filter dropped everything → honest-empty.
+- **FIX 1 (REAL DISCOVERY, talabat.adapter.ts `discover`):** now hits Talabat's OWN restaurant SEARCH
+  `GET /kuwait/restaurants?searchTerm=<q>` — returns the vendors Talabat actually indexes (VERIFIED live:
+  mcdonald→mcdonalds1/…, ice cream→vermilion/prefere, donuts→dunkin, karak→karak-hut, breakfast→breakfast-
+  club). NOT a hand-list. SERP-hit slugs front-ranked; fallback to featured listing if search empty. EXCLUDE
+  extended w/ SERP footer slugs (terms/faq/privacy/contact-us/sitemap/all-areas/about-us/careers/blog).
+- **FIX 2 (food-resolver.ts `queryMatchedRestaurant`):** real outlet slugs carry branch suffixes
+  ("mcdonalds1"). Added brand-PREFIX match (token len≥4 && slugToken.startsWith(token)) → "mcdonald" flips to
+  whole-menu vendor mode. Whole-token match kept otherwise (tikka≠chicken).
+- **FIX 3 (query-normalize.ts gazetteer):** McDonald's → **`mcdonald`** (SINGULAR — Talabat search only
+  matches the singular stem; "mcdonalds"/"ماك" return NOTHING; provider-preferred canonical, like ثلاجة→
+  refrigerator). FOOD_VOCAB has `mcdonald` (not `mcdonalds`) so fuzzy doesn't snap it back. +ايسكريم,
+  دونتس→donuts, جيلاتي→gelato.
+- **RC-2 (air fryer):** electronics gazetteer `قلايه هوائيه`/`قلايه`→air fryer + `fryer` in vocab. AR now = EN.
+- **RC-3 (ranker, food-relevance.ts):** `scoreDish(dish, terms, coreTerms?)` — coreTerms = user's OWN tokens
+  earn EXACT-INTENT BONUS (name+250/substr+150/cat+120) → on-intent dish above same-group sibling (cake>
+  cookie, seafood>veg, latte>generic). Bonus only ORDERS. Filter is called with the NORMALIZED term (كيك→
+  cake) so coreTerms are EN. Added karak/tea group, single-token ice/cream group members.
+- **REAL SPOT-CHECK (LIVE_FETCH=on real providers, compiled resolvers, isolated, NO git):** mcdonalds/
+  ماكدونالدز→884 (was 0), آيس كريم→40, كيك→40 (cake first), donuts→40, كرك→14, breakfast→40, قلاية هوائية→8.
+  Regression clean: kfc 446, rice 27, cake 40, xyzqwfood honest-empty.
+- **Tests +11 (320→331):** query-normalize.spec RC-1/RC-2; food-relevance.spec RC-1 subtype-keep + RC-3 rank;
+  food-resolver.spec mcdonalds1 brand-prefix vendor mode. RUN `cd apps/api && npx jest --runInBand`.
+  PROJECTED 300-suite: 291→~300 (~99-100%); 100 RE empties stay honest (data gap, not search).
+- **EMBEDDINGS REC (ADR-007):** DISCOVERY is now durable (real provider search generalizes); RELEVANCE/ROUTING
+  half (synonym groups, dish↔vendor routing, exact-intent terms) is STILL curated word-by-word = the hand-
+  table treadmill. SCHEDULE the durable fix (Q4 embeddings / generated food taxonomy) — provider search finds
+  a new subtype but the filter can't recognize it without a synonym row. Food long-tail is unbounded → worth it.
+- **TECH DEBT (not a defect):** vendor-mode whole-menu has NO cap (kfc 446, mcdonalds 884 across multiple
+  outlets). Truthful+price-sane but large; add per-vendor dedup + vendor-mode cap + titleCase mcdonalds1→
+  McDonald's. Out of scope here.
+
 ## ADR-007 Q3 — 84→100-area Kuwait gazetteer wired into RE AREA_GROUPS (2026-06-27, 320/320 api, REAL-proven, NO git)
 - **GOAL:** replace the hand-maintained ~12-area `AREA_GROUPS` (realestate-relevance.ts) with the full
   researcher gazetteer so EVERY KW area resolves (fix Jabriya→wrong-area leaks + unlisted-area pass-through).

@@ -48,21 +48,48 @@ export class TalabatAdapter implements ProviderAdapter {
 
   /**
    * Resolve the query's dish/restaurant intent to candidate restaurant ProductRefs (slug+vendorId).
-   * We scan the restaurants listing for slugs whose name matches the query terms; if none match we
-   * take the first few listed restaurants (a non-empty Food result still demonstrates live prices).
+   *
+   * REAL DISCOVERY (ADR-007): we hit Talabat's OWN restaurant SEARCH — `GET /{country}/restaurants?
+   * searchTerm=<q>` — which returns the vendors Talabat actually indexes for that term (verified live:
+   * `mcdonald`→mcdonalds slugs, `ice cream`→ice-cream shops, `donuts`→Dunkin/etc, `karak`→karak vendors,
+   * `breakfast`→breakfast spots). This is NOT a hand-listed slug map; ANY vendor Talabat sells is findable.
+   * The unparametrized listing only returns a ~40-vendor featured subset (no McDonald's / ice-cream /
+   * donut / karak / breakfast), which is why those queries used to honest-empty.
+   *
+   * Fallback: if the search returns nothing parseable we fall back to the plain featured listing so a
+   * generic query still demonstrates live prices.
    */
   async discover(query: DiscoveryQuery, ctx: FetchCtx): Promise<ProductRef[]> {
     const limit = query.limit ?? 5;
-    const listUrl = `${this.baseUrl}/${this.country}/restaurants`;
-    const { status, body } = await httpGet(listUrl, ctx, 'text/html');
-    if (status !== 200) throw new Error(`Talabat restaurants ${status}`);
-
-    const slugs = extractRestaurantSlugs(body);
-    if (slugs.length === 0) return [];
-
     const terms = query.text.toLowerCase().split(/\s+/).filter(Boolean);
-    const matched = slugs.filter((s) => terms.some((t) => s.includes(t)));
-    const picked = (matched.length > 0 ? matched : slugs).slice(0, limit);
+
+    // 1) Real search via Talabat's restaurant SERP (searchTerm). Returns the vendors Talabat indexes.
+    const searchUrl = `${this.baseUrl}/${this.country}/restaurants?searchTerm=${encodeURIComponent(query.text)}`;
+    let slugs: string[] = [];
+    try {
+      const { status, body } = await httpGet(searchUrl, ctx, 'text/html');
+      if (status === 200) slugs = extractRestaurantSlugs(body);
+    } catch {
+      /* fall through to featured listing */
+    }
+
+    // The SERP places matching vendors first; rank slugs that literally contain a query token to the
+    // front (a true name match like "mcdonalds1" / "vermilion-ice-cream" beats an unrelated SERP filler).
+    const isHit = (s: string) => terms.some((t) => t.length >= 2 && s.includes(t));
+    slugs = [...slugs.filter(isHit), ...slugs.filter((s) => !isHit(s))];
+
+    // 2) Fallback to the featured listing only if search yielded nothing usable.
+    if (slugs.length === 0) {
+      const listUrl = `${this.baseUrl}/${this.country}/restaurants`;
+      const { status, body } = await httpGet(listUrl, ctx, 'text/html');
+      if (status !== 200) throw new Error(`Talabat restaurants ${status}`);
+      const listed = extractRestaurantSlugs(body);
+      if (listed.length === 0) return [];
+      const matched = listed.filter(isHit);
+      slugs = matched.length > 0 ? matched : listed;
+    }
+
+    const picked = slugs.slice(0, limit);
 
     const refs: ProductRef[] = [];
     for (const slug of picked) {
@@ -210,6 +237,9 @@ function extractRestaurantSlugs(html: string): string[] {
   const EXCLUDE = new Set([
     'restaurants', 'restaurant', 'cuisine', 'cuisines', 'login', 'register',
     'account', 'cart', 'checkout', 'search', 'offers', 'grocery', 'groceries',
+    // SERP (?searchTerm=) page footer/nav links — not vendors.
+    'terms', 'faq', 'privacy', 'contact-us', 'sitemap', 'about-us', 'careers',
+    'blog', 'all-areas',
   ]);
   const slugs = new Set<string>();
   for (const m of html.matchAll(/"\/kuwait\/([a-z0-9][a-z0-9-]{1,})"/gi)) {

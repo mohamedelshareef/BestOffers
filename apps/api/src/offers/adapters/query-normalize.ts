@@ -70,6 +70,8 @@ const ELECTRONICS_GAZETTEER: Record<string, string> = {
   'ميكروويف': 'microwave', 'مايكروويف': 'microwave',
   'مكنسه': 'vacuum cleaner', 'مكنسه كهربائيه': 'vacuum cleaner',
   'فرن': 'oven', 'مجفف': 'dryer', 'نشافه': 'dryer',
+  // air fryer (E072): EN "air fryer" discovers fine; the AR قلاية هوائية / قلاية هوائيه must map to it.
+  'قلايه هوائيه': 'air fryer', 'قلايه': 'air fryer', 'قلايه كهربائيه': 'air fryer',
   // gaming / brands
   'بلايستيشن': 'playstation', 'بلايستيشن 5': 'playstation 5', 'بلاي ستيشن': 'playstation',
   'اكس بوكس': 'xbox', 'سامسونج': 'samsung', 'ال جي': 'lg', 'ابل': 'apple',
@@ -86,14 +88,20 @@ const FOOD_GAZETTEER: Record<string, string> = {
   'باستا': 'pasta', 'مكرونه': 'pasta', 'ساندويتش': 'sandwich', 'سلطه': 'salad',
   // desserts / sweets
   'حلى': 'dessert', 'حلويات': 'dessert', 'كيك': 'cake', 'كيكه': 'cake', 'كيكه شوكولاته': 'chocolate cake',
-  'تشيز كيك': 'cheesecake', 'تشيزكيك': 'cheesecake', 'ايس كريم': 'ice cream', 'بوظه': 'ice cream',
-  'كنافه': 'kunafa', 'كنافه نابلسيه': 'kunafa', 'دونات': 'donuts', 'كرواسون': 'croissant',
+  'تشيز كيك': 'cheesecake', 'تشيزكيك': 'cheesecake', 'ايس كريم': 'ice cream', 'ايسكريم': 'ice cream',
+  'بوظه': 'ice cream', 'جيلاتي': 'gelato',
+  'كنافه': 'kunafa', 'كنافه نابلسيه': 'kunafa', 'دونات': 'donuts', 'دونتس': 'donuts', 'كرواسون': 'croissant',
   // drinks
   'قهوه': 'coffee', 'قهوه مختصه': 'specialty coffee', 'كوفي': 'coffee', 'لاتيه': 'latte',
   'كابتشينو': 'cappuccino', 'كرك': 'karak tea', 'شاي': 'tea', 'عصير': 'juice',
   // meals / vendors
   'فطور': 'breakfast', 'فطور صباحي': 'breakfast', 'افطار': 'breakfast', 'وجبات دايت': 'diet meal',
-  'ماكدونالدز': 'mcdonalds', 'ماك': 'mcdonalds',
+  // McDonald's: Talabat's restaurant search indexes the SINGULAR stem — "mcdonald" returns the real
+  // outlet slugs (mcdonalds1, mcdonalds-1800059-…) but "mcdonalds"/"ماك" return nothing. Map to the
+  // provider-preferred stem (same principle as ثلاجة→refrigerator). The vendor-slug match still flips
+  // it to whole-menu mode via the "mcdonald" brand-prefix.
+  'ماكدونالدز': 'mcdonald', 'ماكدونالد': 'mcdonald', 'ماك': 'mcdonald', 'مكدونالدز': 'mcdonald',
+  'mcdonalds': 'mcdonald', 'mcdonald s': 'mcdonald', 'macdonalds': 'mcdonald',
 };
 
 /** Canonical EN vocabulary (gazetteer VALUES + extra EN catalog terms) for fuzzy typo-correction. */
@@ -101,7 +109,7 @@ const ELECTRONICS_VOCAB = uniqueWords([
   ...Object.values(ELECTRONICS_GAZETTEER),
   'iphone', 'ipad', 'macbook', 'laptop', 'tablet', 'samsung', 'galaxy', 'pixel', 'dell', 'hp', 'lenovo',
   'television', 'monitor', 'refrigerator', 'fridge', 'dishwasher', 'washing', 'machine', 'washer',
-  'microwave', 'oven', 'dryer', 'vacuum', 'cleaner', 'dyson', 'airpods', 'headphones', 'earbuds',
+  'microwave', 'oven', 'dryer', 'vacuum', 'cleaner', 'dyson', 'fryer', 'airpods', 'headphones', 'earbuds',
   'bluetooth', 'speaker', 'playstation', 'xbox', 'nintendo', 'apple', 'watch', 'conditioner',
 ]);
 
@@ -110,7 +118,7 @@ const FOOD_VOCAB = uniqueWords([
   'biryani', 'machboos', 'kabsa', 'mandi', 'mansaf', 'rice', 'burger', 'pizza', 'chicken', 'shawarma',
   'kabab', 'kebab', 'grill', 'grilled', 'fish', 'shrimp', 'pasta', 'sandwich', 'salad', 'fried',
   'cake', 'cheesecake', 'tiramisu', 'kunafa', 'donuts', 'croissant', 'cream', 'pancakes', 'waffle',
-  'coffee', 'latte', 'cappuccino', 'espresso', 'karak', 'breakfast', 'mcdonalds', 'pizza', 'hut',
+  'coffee', 'latte', 'cappuccino', 'espresso', 'karak', 'breakfast', 'mcdonald', 'pizza', 'hut',
   'pepperoni', 'broasted', 'bucket',
 ]);
 

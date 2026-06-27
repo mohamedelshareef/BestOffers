@@ -54,12 +54,19 @@ const SYNONYM_GROUPS: string[][] = [
   // a recognized dish term, so a "sushi"-named slug flipped the query to restaurant-mode and dumped the
   // whole menu of every sushi restaurant). With a group, "sushi" stays a DISH term → relevance-filtered.
   ['sushi', 'sashimi', 'maki', 'nigiri', 'roll', 'rolls', 'سوشي', 'سوشى', 'ساشيمي', 'ماكي', 'رول'],
-  ['coffee', 'قهوه', 'كوفي', 'latte', 'لاتيه', 'كابتشينو', 'cappuccino', 'espresso', 'كافيه', 'كوفيه'],
+  ['coffee', 'قهوه', 'كوفي', 'latte', 'لاتيه', 'كابتشينو', 'cappuccino', 'espresso', 'كافيه', 'كوفيه',
+    'mocha', 'موكا', 'americano', 'امريكانو', 'macchiato'],
+  // karak / tea (F073): "كرك"/"karak" is the Kuwaiti spiced milk-tea. Its own group so the karak-vendor
+  // menus (Karak Tea / Special Karak / Chai) keep their tea items and don't honest-empty.
+  ['karak', 'tea', 'chai', 'كرك', 'شاي', 'جاي', 'كركك'],
   ['dessert', 'حلى', 'حلو', 'حلويات', 'cake', 'كيك', 'كيكه', 'sweet', 'cheesecake', 'tiramisu', 'mousse', 'cookie', 'brownie'],
-  ['icecream', 'ice cream', 'gelato', 'sundae', 'بوظه', 'ايس كريم', 'ايسكريم', 'جيلاتي'],
+  // ice cream (F066/F067): include the SINGLE tokens "ice"+"cream" + "gelato"/"sundae"/"scoop" so the
+  // normalized "ice cream" query (two tokens) hits the group and the ice-cream vendor menus score.
+  ['icecream', 'ice', 'cream', 'gelato', 'sundae', 'scoop', 'sorbet', 'بوظه', 'ايس', 'كريم', 'ايسكريم', 'جيلاتي', 'مثلجات'],
   ['kunafa', 'kanafeh', 'knafeh', 'كنافه', 'كنافة'],
-  ['donut', 'donuts', 'doughnut', 'دونات', 'دونتس'],
-  ['breakfast', 'فطور', 'ريوق', 'افطار', 'pancakes', 'pancake', 'بانكيك', 'waffle', 'وافل', 'eggs', 'بيض'],
+  ['donut', 'donuts', 'doughnut', 'doughnuts', 'دونات', 'دونتس', 'دونمز'],
+  ['breakfast', 'فطور', 'ريوق', 'افطار', 'pancakes', 'pancake', 'بانكيك', 'waffle', 'وافل', 'eggs', 'بيض',
+    'omelette', 'omelet', 'اومليت', 'croissant', 'كرواسون', 'brunch', 'فطار'],
   ['shrimp', 'روبيان', 'جمبري', 'قريدس'],
   ['fries', 'بطاطس', 'بطاطا', 'potato'],
   // meal-prep / diet / healthy — the IG meal-prep sellers' core category (F031 "وجبات دايت" etc.). These
@@ -200,8 +207,12 @@ export function isSavoryRiceQuery(query: string): boolean {
  *  - a term hit in the dish NAME is the strongest signal
  *  - a term hit in the CATEGORY (menu section) is strong (whole "Biryani" section matches "rice")
  *  - whole-word hits beat substring hits
+ *  - `coreTerms` (the user's OWN query tokens, before synonym expansion) earn an EXACT-INTENT BONUS so an
+ *    on-intent dish ranks above a same-group sibling: "كيك"/cake beats cookie/mousse, "latte" beats a
+ *    generic coffee, "seafood platter" beats a vegetable platter (RC-3 ranker tighten). Bonus only orders;
+ *    it never drops a sibling (a group match still scores via `terms`).
  */
-export function scoreDish(dish: DishCandidate, terms: Set<string>): number {
+export function scoreDish(dish: DishCandidate, terms: Set<string>, coreTerms?: Set<string>): number {
   if (terms.size === 0) return 0;
   // Drop the "— Restaurant" suffix so a restaurant called e.g. "Rice House" doesn't match a burger.
   const name = normalizeFoodText((dish.title || '').split('—')[0]);
@@ -220,6 +231,18 @@ export function scoreDish(dish: DishCandidate, terms: Set<string>): number {
     if (word.test(category)) score += 50;
     else if (allowSubstring && category.includes(term)) score += 30;
     if (allowSubstring && desc.includes(term)) score += 15;
+  }
+
+  // EXACT-INTENT BONUS (RC-3): reward a dish that matches the user's OWN word (not just a group sibling).
+  if (coreTerms && coreTerms.size) {
+    for (const term of coreTerms) {
+      if (!term) continue;
+      const word = new RegExp(`(^|\\s)${escapeRe(term)}($|\\s)`, 'u');
+      const allowSubstring = term.length >= 4;
+      if (word.test(name)) score += 250; // exact on-intent dish floats to the top
+      else if (allowSubstring && name.includes(term)) score += 150;
+      if (word.test(category)) score += 120;
+    }
   }
   return score;
 }
@@ -294,8 +317,17 @@ export function filterDishesByQuery<T extends DishCandidate>(
   const savoryRice = isSavoryRiceQuery(query);
   const considered = savoryRice ? live.filter((it) => !isDessertRice(it)) : live;
 
+  // RC-3: the user's OWN tokens (pre-expansion) drive the exact-intent rank bonus so an on-intent dish
+  // (cake for "كيك", latte for "latte", seafood for "seafood platter") sorts above a group sibling.
+  const coreTerms = new Set(foodTokens(query));
+
   const scored = considered
-    .map((item) => ({ item, score: scoreDish(item, terms), condiment: isCondiment(item), beverage: isBeverage(item) }))
+    .map((item) => ({
+      item,
+      score: scoreDish(item, terms, coreTerms),
+      condiment: isCondiment(item),
+      beverage: isBeverage(item),
+    }))
     .filter((s) => s.score > 0);
 
   // Did any REAL dish (non-condiment, non-beverage) match? A dish query that matches only sauces/drinks
