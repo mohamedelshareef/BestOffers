@@ -195,10 +195,10 @@ export default function SearchScreen() {
   const renderCard = ({ item, index }: { item: ResultCard; index: number }) =>
     index === 0 ? (
       <VerdictRibbon savingsFils={savingsFils} locale={lc}>
-        <ResultCardView card={item} locale={lc} />
+        <ResultCardView card={item} locale={lc} rank={1} />
       </VerdictRibbon>
     ) : (
-      <ResultCardView card={item} locale={lc} />
+      <ResultCardView card={item} locale={lc} rank={index + 1} />
     );
 
   return (

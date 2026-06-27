@@ -10,7 +10,7 @@
 <helmet>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-<link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&family=Tajawal:wght@400;500;700;800&display=swap" rel="stylesheet">
+<link href="https://fonts.googleapis.com/css2?family=Rubik:wght@400;500;600;700;800&family=IBM+Plex+Sans+Arabic:wght@400;500;600;700&display=swap" rel="stylesheet">
 <style>
   *{box-sizing:border-box}
   body{margin:0}
@@ -20,7 +20,7 @@
   .bo-scroll::-webkit-scrollbar-track{background:transparent}
 </style>
 </helmet>
-<div dir="{{ dir }}" style="--teal:#0B6B5B;--teal-strong:#075345;--teal-soft:#E3F2EE;--gold:#C8881C;--gold-strong:#A86E0E;--gold-soft:#FBF0D9;--canvas:#FBF8F3;--surface:#FFFFFF;--surface-alt:#F1ECE3;--ink:#18211F;--ink2:#5C6864;--on-gold:#2A1D03;--border:#E6DFD4;--border-strong:#D6CDBE;--teal-grad:linear-gradient(135deg,#0E8C74,#075345);--gold-grad:linear-gradient(135deg,#E0A93B,#C8881C);--disp:'Plus Jakarta Sans','Tajawal',system-ui,sans-serif;--body:'Plus Jakarta Sans','Tajawal',system-ui,sans-serif;background:#EFEAE1;font-family:var(--body);color:var(--ink);min-height:100vh;padding:30px 16px 60px">
+<div dir="{{ dir }}" style="--teal:#0B6B5B;--teal-strong:#075345;--teal-soft:#E3F2EE;--gold:#C8881C;--gold-strong:#A86E0E;--gold-soft:#FBF0D9;--canvas:#FBF8F3;--surface:#FFFFFF;--surface-alt:#F1ECE3;--ink:#18211F;--ink2:#5C6864;--on-gold:#2A1D03;--border:#E6DFD4;--border-strong:#D6CDBE;--teal-grad:linear-gradient(135deg,#0E8C74,#075345);--gold-grad:linear-gradient(135deg,#E0A93B,#C8881C);--disp:'Rubik','IBM Plex Sans Arabic',system-ui,sans-serif;--body:'IBM Plex Sans Arabic','Rubik',system-ui,sans-serif;background:#EFEAE1;font-family:var(--body);color:var(--ink);min-height:100vh;padding:30px 16px 60px">
 
   <div style="max-width:900px;margin:0 auto">
     <!-- window chrome -->
@@ -200,11 +200,11 @@ class Component extends DCLogic {
       title: 'BestOffers', subtitle: "Kuwait's Best Deals, Found by AI", developer: 'BestOffers · Kuwait',
       get: 'GET', inApp: 'Offers In-App Purchases',
       stats: [
-        { label: 'Rating', value: '4.9', star: true, sub: '2.3K Ratings' },
-        { label: 'Age', value: '4+', sub: 'Years Old' },
-        { label: 'Category', value: '#1', sub: 'Shopping' },
-        { label: 'Language', value: 'AR · EN', sub: 'Arabic-first' },
         { label: 'Size', value: '38 MB', sub: 'iOS · Android' },
+        { label: 'Category', value: 'Shopping', sub: 'Kuwait' },
+        { label: 'Languages', value: 'AR · EN', sub: 'Arabic-first' },
+        { label: 'Age Rating', value: '4+', sub: 'Content' },
+        { label: 'Price', value: 'Free', sub: '$1/mo after' },
       ],
       previewTitle: 'Preview', scrollHint: 'Scroll for more →',
       cap1: 'Pick a category — calm, never a storefront',
@@ -244,11 +244,11 @@ class Component extends DCLogic {
       title: 'بست أوفرز', subtitle: 'أفضل العروض في الكويت — بالذكاء الاصطناعي', developer: 'بست أوفرز · الكويت',
       get: 'تحميل', inApp: 'يتضمّن مشتريات داخل التطبيق',
       stats: [
-        { label: 'التقييم', value: '4.9', star: true, sub: '2.3 ألف تقييم' },
-        { label: 'العمر', value: '4+', sub: 'سنوات' },
-        { label: 'الفئة', value: '#1', sub: 'تسوّق' },
-        { label: 'اللغة', value: 'AR · EN', sub: 'عربي أولاً' },
         { label: 'الحجم', value: '38 MB', sub: 'iOS · Android' },
+        { label: 'الفئة', value: 'تسوّق', sub: 'الكويت' },
+        { label: 'اللغات', value: 'AR · EN', sub: 'عربي أولاً' },
+        { label: 'التصنيف العمري', value: '4+', sub: 'المحتوى' },
+        { label: 'السعر', value: 'مجاني', sub: '$1/شهر بعدها' },
       ],
       previewTitle: 'معاينة', scrollHint: '← مرّر للمزيد',
       cap1: 'اختر فئة — بهدوء، بلا واجهة متجر',

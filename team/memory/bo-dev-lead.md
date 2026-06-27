@@ -2,6 +2,49 @@
 
 > READ at task start. UPDATE at end with durable facts only. Keep lean; prune stale.
 
+## CLAUDE-REVAMP applied to Expo app (additive UI refinements) — RENDER-PROVEN (2026-06-27, 22/22 mobile, tsc clean, NO git)
+- **GOAL:** apply the reviewed Claude Design REVAMP adopt-list to the RN app additively (team/design/
+  claude-design-review.md + team/marketing/claude-design-review.md). FONTS: keep Rubik+IBM Plex Sans
+  Arabic, REJECT Jakarta/Tajawal. Most adopt-items were ALREADY in place from earlier v2 work.
+- **ALREADY CORRECT (confirmed, no change):** theme.ts fonts = Rubik(display)/IBM Plex(body); price
+  22/displayExtraBold(800); media well 88; ClarifierQuestion N-of-5 pill + segmented bar; VerdictRibbon
+  gold-gradient signature; chips full-pill; tokens 1:1 with tokens.css. 3 additive tokens (--r-input-hero/
+  --media-well/--clarifier-bar-h) live as concrete RN values (88, hero r18 via radius.input on search box),
+  not named theme keys — fine.
+- **NEW refinements in `ResultCard.tsx` (the only component edited):** (1) RANK BADGE — `rank?` prop, ink
+  circle top-START on the media well, shown for cards #2..N (rank>1; #1 wears the verdict ribbon). logical
+  start via `I18nManager.isRTL ? {right:6}:{left:6}` — NOTE `insetInlineStart` is NOT in this RN version's
+  style types (tsc TS2345) so use left/right conditional, NOT inset-inline. (2) GREYSCALE SILHOUETTE for
+  missing image — View-built box-frame + corner dot in border.strong on surfaceAlt (no broken image). (3) IG
+  GLYPH — dependency-free `InstagramGlyph` (rounded square + center ring + corner dot from Views) replaces
+  the 📷 emoji in the provider row AND the "View on Instagram" CTA; NEUTRAL icon, does NOT flip in RTL. NO
+  react-native-svg / vector-icons in mobile deps — DO NOT add one for a glyph; build from Views. (4) RECENCY
+  CHIP — optional `recency?` prop (surfaceAlt pill), gated on presence; NO server field exists for it yet
+  (ResultCard shared type has no postedAt/recency) so it never fabricates — wire a server-derived string when
+  available. (5) PRICE-ON-REQUEST branch — detect via `card.priceFils === 0` (server already localizes
+  priceLabel to "السعر بالخاص — شوف البوست"/"Price on request — see post"); render NON-gold secondary, no
+  number. `search.tsx` passes `rank={index+1}` (#1=1).
+- **App Store mockup truthful swap (`ClaudeDesigne/BestOffers App Store.dc.html`):** removed fabricated
+  stats (4.9 / 2.3K Ratings / #1 Shopping / "4+ Years Old" + the gold star) in BOTH EN+AR `stats[]`,
+  replaced with the truthful 5-field strip from app-store-copy.md §7 (Size 38MB·iOS/Android, Category
+  Shopping·Kuwait, Languages AR·EN, Age Rating 4+·Content, Price Free·$1/mo after). Also swapped this file's
+  fonts Jakarta/Tajawal→Rubik+IBM Plex (--disp/--body + the googleapis link). The `s.star` sc-if renders
+  nothing now (no star:true row) = clean. Other 3 .dc.html files (Prototype/Landing/Revamp) still carry the
+  Jakarta/Tajawal font link — NOT swapped here (out of this task's scope; flag for a follow-up if they ship).
+- **RENDER PROOF (REAL booted iPhone 17 Pro sim, mock API, NO live Claude/Apify):** isolated mock API :3400
+  (CLAUDE=mock LIVE_FETCH=off SOCIAL=mock), SPA :8770, app.json apiBaseUrl TEMPORARILY set to :3400 +
+  re-export (`expo export --platform web --clear` — MUST --clear, expo caches the old manifest's
+  apiBaseUrl), then REVERTED to "". Drove `/search?cat=&skipclar=1&q=<urlenc>` (auto-run+skip→results).
+  Shots: `team/qa/sim/revamp-results-rankbadge-ig.png` (RE "السالوة للايجار" → verdict ribbon on #1, RANK
+  BADGE "2" on #2, IG glyph in provider rows + teal "شوف على إنستقرام" pill, gold 420/600 KWD, Rubik+IBM
+  Plex, RTL, Western numerals) + `team/qa/sim/revamp-results-price-on-request.png` (food "حلى" →
+  @zahracakes_kwt card shows "السعر بالخاص — شوف البوست" NON-gold, no number). Both VERIFIED rendering.
+- **MOCK SEED QUERIES that exercise the refinements (durable):** RE `السالوة للايجار`→3 cards (incl. 1
+  priceFils=0 price-on-request); RE `شقة للايجار`(no area)→8 cards (rank badges 2..8); food `حلى`→1
+  price-on-request card. All IG-sourced. Intent contract: POST /search/intent {intentRaw,sector,locale};
+  skip loop POST /search/answer {searchSessionId,dimension:questions[0].dimension,answer:'__skip__'}.
+- **Tests: 22/22 mobile (7 suites) · mobile tsc clean.** API untouched. NO git commit.
+
 ## ADR-007 RC-1/RC-2/RC-3 — remaining 9 stable defects cleared via REAL Talabat search (2026-06-27, 331/331 api, REAL-proven, NO git)
 - **RE-VERIFIED (independent run 2026-06-27):** full api suite **331/331 GREEN** (28 suites, ~11s); 3 RC specs
   89/89. Normalize check: mcdonalds/ماكدونالدز→`mcdonald`, آيس كريم→`ice cream`, كرك→`karak tea`, فطور صباحي→
