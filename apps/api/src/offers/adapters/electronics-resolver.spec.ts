@@ -156,13 +156,14 @@ describe('ElectronicsOfferResolver — catalog-free discovery (ADR-007 Q1)', () 
   describe('relax-and-retry discovery on over-specific multi-word queries', () => {
     const cases: Array<{ q: string; core: string; title: string }> = [
       { q: 'air conditioner split unit', core: 'air conditioner', title: 'Gree Split Air Conditioner 1.5 Ton' },
-      { q: 'vacuum cleaner Dyson', core: 'vacuum cleaner', title: 'Philips Vacuum Cleaner 2000W' },
+      // BRAND-named queries must return the SAME brand (owner bug: a brand query must not leak another brand).
+      { q: 'vacuum cleaner Dyson', core: 'vacuum cleaner', title: 'Dyson V15 Detect Cordless Vacuum Cleaner' },
       { q: 'Google Pixel 9', core: 'google pixel', title: 'Google Pixel 8 Pro 256GB' },
       { q: 'AirPods Pro 2', core: 'airpods', title: 'Apple AirPods 3rd Generation' },
       { q: 'Apple Watch Series 10', core: 'apple watch', title: 'Apple Watch SE 44mm' },
       { q: 'LG OLED 65 TV', core: 'lg oled tv', title: 'LG OLED 55 inch evo C4 Smart TV' },
       { q: 'Samsung side by side fridge', core: 'samsung fridge', title: 'Samsung Refrigerator 600L Twin Cooling' },
-      { q: 'front load washing machine LG', core: 'washing machine', title: 'Bosch Washing Machine 8kg 1400rpm' },
+      { q: 'front load washing machine LG', core: 'washing machine', title: 'LG Washing Machine 8kg 1400rpm' },
       { q: 'Xiaomi phone', core: 'xiaomi', title: 'Xiaomi Redmi Note 13 Pro 256GB' },
       { q: 'headphones under 50 KWD', core: 'headphones', title: 'Sony WH-CH520 Wireless Headphones' },
     ];
@@ -200,6 +201,35 @@ describe('ElectronicsOfferResolver — catalog-free discovery (ADR-007 Q1)', () 
       ]);
       const resolver = new ElectronicsOfferResolver([adapter], new InMemoryOfferCache());
       const out = await resolver.resolve(intent('Foobar 9000 gadget'));
+      expect(out).toEqual([]);
+    });
+
+    // OWNER bug: "Samsung phone" returned Adonit STYLUSES. Even after relaxing discovery to a bare brand,
+    // the relevance filter must enforce brand AND type so unrelated-brand / wrong-type items never pass.
+    it('REGRESSION "Samsung phone": relaxed discovery returns ONLY Samsung phones, NEVER a stylus', async () => {
+      // The relaxed floor "samsung" discovers Samsung devices PLUS the provider's fuzzy noise (Adonit
+      // styluses, a Samsung tablet, a case). Only Samsung PHONES may survive.
+      const adapter = new SearchAwareAdapter('prov_blink', 'Blink', 'samsung', [
+        offer('s1', 'Samsung Galaxy A55 5G 256GB Smartphone', 99000),
+        offer('s2', 'Adonit Jot Pro Fine Point Stylus', 7500), // the live bug item — must be DROPPED
+        offer('s3', 'Adonit Mini 4 Stylus', 8000), // the live bug item — must be DROPPED
+        offer('s4', 'Samsung Galaxy Tab S9 Tablet', 159000), // wrong type — DROPPED
+      ]);
+      const resolver = new ElectronicsOfferResolver([adapter], new InMemoryOfferCache());
+      const out = await resolver.resolve(intent('Samsung phone'));
+      expect(out.length).toBe(1);
+      expect(out[0].sku.canonicalName).toBe('Samsung Galaxy A55 5G 256GB Smartphone');
+      expect(out.some((o) => /adonit|stylus|tablet/i.test(o.sku.canonicalName))).toBe(false);
+    });
+
+    it('REGRESSION brand-mismatch: "vacuum cleaner Dyson" with ONLY a Philips vacuum → honest-empty', async () => {
+      // A brand-named query must not leak another brand. If the catalog has no Dyson vacuum, the honest
+      // answer is empty — NOT a Philips vacuum.
+      const adapter = new SearchAwareAdapter('prov_eureka', 'Eureka', 'vacuum cleaner', [
+        offer('e1', 'Philips Vacuum Cleaner 2000W', 39000),
+      ]);
+      const resolver = new ElectronicsOfferResolver([adapter], new InMemoryOfferCache());
+      const out = await resolver.resolve(intent('vacuum cleaner Dyson'));
       expect(out).toEqual([]);
     });
   });

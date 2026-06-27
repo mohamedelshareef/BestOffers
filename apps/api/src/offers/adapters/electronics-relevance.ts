@@ -110,7 +110,7 @@ export function electronicsTokens(query: string): string[] {
  * at the resolver level so it covers every provider. Truthful: only filters real hits, never invents.
  */
 const ACCESSORY_RE =
-  /\b(case|cover|protector|screen\s*guard|tempered\s*glass|charger|cable|adapter|stand|mount|holder|bag|sleeve|pouch|strap|skin|grip|lens\s*protector|keyboard|mouse|mouse\s*pad|hub|dock|streaming\s*(device|stick)|tv\s*stick|remote)\b|حافظه|غطاء|جراب|كفر|شاحن|كيبل|حامل|حقيبه|واقي\s*شاشه/i;
+  /\b(case|cover|protector|screen\s*guard|tempered\s*glass|charger|cable|adapter|stand|mount|holder|bag|sleeve|pouch|strap|skin|grip|lens\s*protector|keyboard|mouse|mouse\s*pad|hub|dock|streaming\s*(device|stick)|tv\s*stick|remote|carplay|car\s*play|wireless\s*car|car\s*charger|car\s*adapter)\b|\bfor\s+all\s+(smart\s*)?phones\b|حافظه|غطاء|جراب|كفر|شاحن|كيبل|حامل|حقيبه|واقي\s*شاشه/i;
 
 /** True if a title looks like an accessory/companion rather than the device itself. */
 export function isAccessoryTitle(title: string): boolean {
@@ -120,6 +120,155 @@ export function isAccessoryTitle(title: string): boolean {
 /** True if the QUERY itself asked for that accessory type (then we should NOT drop it). */
 export function queryWantsAccessory(query: string): boolean {
   return ACCESSORY_RE.test(canonicalizeElectronicsPhrase(query));
+}
+
+// ───────────────────────── brand + product-TYPE enforcement (OWNER bug: "Samsung phone"→Adonit stylus) ─────────────────────────
+//
+// THE BUG (live, real): "Samsung phone" returned Adonit Jot Pro / Mini STYLUSES (other brand, wrong type).
+// Root cause: the relax-and-retry ladder relaxed "Samsung phone" down to a generic core, the provider's
+// fuzzy search returned unrelated-brand accessories, and the relevance filter enforced only loose token
+// presence — it did NOT enforce the query's BRAND or its PRODUCT-TYPE. So an Adonit stylus could satisfy
+// a Samsung-phone query.
+//
+// THE FIX (GENERALIZING, by token CLASS — not a per-query patch):
+//   1. If the query names a BRAND (samsung/apple/lg/sony/dyson/xiaomi…), a hit whose detectable brand is a
+//      DIFFERENT known brand is DROPPED. (A hit with no detectable brand is kept — could be an unbranded
+//      listing of the right product; the type guard still applies.)
+//   2. If the query names a concrete PRODUCT-TYPE (phone/laptop/tv/fridge/vacuum/headphones…), a hit of a
+//      DIFFERENT concrete type is DROPPED. Accessories (stylus/case/charger/cover…) are their OWN type, so
+//      a stylus can NEVER satisfy "phone".
+// Both guards are applied to the FULL original query (rankQuery) so relaxing discovery can never relax away
+// the brand/type identity check.
+
+/** Known electronics brand tokens (whole-word). Mirrors query-normalize's brand list; kept local so the
+ *  relevance module has no cross-import. A hit's brand = a brand token found in its title (or attrs.brand). */
+const BRAND_TOKENS = new Set<string>([
+  'apple', 'samsung', 'lg', 'sony', 'dyson', 'xiaomi', 'huawei', 'google', 'pixel', 'dell', 'hp',
+  'lenovo', 'asus', 'acer', 'msi', 'bosch', 'ariston', 'hitachi', 'panasonic', 'toshiba', 'nintendo',
+  'microsoft', 'oneplus', 'oppo', 'realme', 'nokia', 'motorola', 'bose', 'jbl', 'anker', 'philips',
+  'nothing', 'honor', 'vivo', 'tcl', 'hisense', 'sharp', 'whirlpool', 'siemens', 'beko', 'midea',
+  'canon', 'nikon', 'logitech', 'razer', 'adonit',
+]);
+
+/** Brand families: distinct catalog names that mean the SAME maker, so we don't false-drop. */
+const BRAND_ALIASES: Record<string, string> = {
+  iphone: 'apple', ipad: 'apple', macbook: 'apple', mac: 'apple', airpods: 'apple', imac: 'apple',
+  galaxy: 'samsung', pixel: 'google', playstation: 'sony', ps5: 'sony', surface: 'microsoft', xbox: 'microsoft',
+};
+
+/**
+ * PRODUCT-TYPE taxonomy: a concrete device/accessory TYPE → the whole-word keywords that identify it.
+ * Order matters for detection only in that the FIRST matching type wins per side; we compare types, not
+ * keywords. Accessory types are flagged so an accessory can never satisfy a device query.
+ */
+interface ProductType { type: string; accessory: boolean; keywords: string[] }
+const PRODUCT_TYPES: ProductType[] = [
+  // accessories first (more specific) so "phone case" → case, not phone.
+  { type: 'stylus', accessory: true, keywords: ['stylus', 'jot pro', 'pencil'] },
+  { type: 'case', accessory: true, keywords: ['case', 'cover', 'sleeve', 'pouch', 'folio', 'flip cover'] },
+  { type: 'protector', accessory: true, keywords: ['screen protector', 'tempered glass', 'screen guard', 'protector'] },
+  { type: 'charger', accessory: true, keywords: ['charger', 'cable', 'adapter', 'power bank', 'powerbank'] },
+  { type: 'mount', accessory: true, keywords: ['mount', 'stand', 'holder', 'grip', 'tripod', 'dock'] },
+  { type: 'bag', accessory: true, keywords: ['bag', 'backpack', 'carry case'] },
+  { type: 'remote', accessory: true, keywords: ['remote', 'remote control'] },
+  { type: 'keyboard', accessory: true, keywords: ['keyboard', 'mouse', 'mousepad', 'mouse pad'] },
+  { type: 'streaming', accessory: true, keywords: ['streaming stick', 'tv stick', 'streaming device'] },
+  // concrete devices — list the MORE-SPECIFIC types (buds/watch/tablet) before phone so a "Galaxy Watch" /
+  // "Pixel Buds" / "Galaxy Tab" classifies as watch/headphones/tablet, NOT phone. Brand-family tokens
+  // (galaxy/pixel/iphone) are deliberately NOT phone keywords — they're brands and would mis-type a
+  // Galaxy Watch as a phone. "phone"/"smartphone"/"mobile" are the real phone signals.
+  { type: 'headphones', accessory: false, keywords: ['headphones', 'earphones', 'earbuds', 'airpods', 'headset', 'buds', 'pixel buds', 'galaxy buds'] },
+  { type: 'watch', accessory: false, keywords: ['smartwatch', 'apple watch', 'galaxy watch', 'pixel watch', 'watch'] },
+  { type: 'tablet', accessory: false, keywords: ['tablet', 'ipad', 'galaxy tab', 'tab'] },
+  { type: 'laptop', accessory: false, keywords: ['laptop', 'notebook', 'macbook', 'ultrabook', 'chromebook'] },
+  { type: 'phone', accessory: false, keywords: ['smartphone', 'phone', 'mobile'] },
+  { type: 'speaker', accessory: false, keywords: ['speaker', 'soundbar', 'sound bar'] },
+  { type: 'tv', accessory: false, keywords: ['tv', 'television'] },
+  { type: 'monitor', accessory: false, keywords: ['monitor', 'display'] },
+  { type: 'fridge', accessory: false, keywords: ['fridge', 'refrigerator'] },
+  { type: 'washer', accessory: false, keywords: ['washing machine', 'washer'] },
+  { type: 'dishwasher', accessory: false, keywords: ['dishwasher'] },
+  { type: 'dryer', accessory: false, keywords: ['dryer'] },
+  { type: 'microwave', accessory: false, keywords: ['microwave'] },
+  { type: 'oven', accessory: false, keywords: ['oven'] },
+  { type: 'ac', accessory: false, keywords: ['air conditioner', 'split ac', 'ac unit'] },
+  { type: 'vacuum', accessory: false, keywords: ['vacuum', 'hoover'] },
+  { type: 'fryer', accessory: false, keywords: ['air fryer', 'fryer'] },
+  { type: 'camera', accessory: false, keywords: ['camera', 'dslr', 'mirrorless'] },
+  { type: 'console', accessory: false, keywords: ['playstation', 'xbox', 'nintendo', 'console'] },
+  { type: 'computer', accessory: false, keywords: ['desktop', 'pc', 'computer'] },
+];
+
+/** Detect the canonical BRAND named in a string (title or query), or null. attrs.brand takes priority. */
+export function detectBrand(text: string, attrBrand?: string): string | null {
+  const fields = [attrBrand ?? '', text];
+  for (const f of fields) {
+    const norm = ` ${normalizeElectronicsText(f)} `;
+    if (!norm.trim()) continue;
+    for (const b of BRAND_TOKENS) if (norm.includes(` ${b} `)) return b;
+    for (const [alias, brand] of Object.entries(BRAND_ALIASES)) if (norm.includes(` ${alias} `)) return brand;
+  }
+  return null;
+}
+
+/**
+ * Phone-LINE model families: a brand token that, used bare with a model number, names a PHONE (so
+ * "Google Pixel 9" / "Galaxy S24" / "iPhone 16" imply type=phone even with no literal word "phone").
+ * Used ONLY to infer the QUERY's intended type — never to type a hit (a "Pixel Buds" hit must type as
+ * headphones via its own keyword, which is listed before phone).
+ */
+const PHONE_LINE_TOKENS = new Set(['iphone', 'galaxy', 'pixel']);
+const PHONE_TYPE = PRODUCT_TYPES.find((p) => p.type === 'phone')!;
+
+/** Detect the concrete PRODUCT-TYPE named in a string, or null. Accessory/specific types win over phone. */
+export function detectProductType(text: string): ProductType | null {
+  const norm = ` ${normalizeElectronicsText(text)} `;
+  if (!norm.trim()) return null;
+  for (const pt of PRODUCT_TYPES) {
+    for (const kw of pt.keywords) {
+      const k = normalizeElectronicsText(kw);
+      if (norm.includes(` ${k} `)) return pt;
+    }
+  }
+  return null;
+}
+
+/**
+ * QUERY-side type intent: detectProductType, but if none found AND the query names a bare phone-LINE
+ * brand token (pixel/galaxy/iphone with no other type word), infer type=phone. So "Google Pixel 9" enforces
+ * phone → a "Pixel Buds" / "Pixel Watch" hit (which self-types as headphones/watch) is dropped. Hit-side
+ * detection never uses this — only the query's intended type does.
+ */
+export function detectQueryType(query: string): ProductType | null {
+  const direct = detectProductType(query);
+  if (direct) return direct;
+  const norm = ` ${normalizeElectronicsText(query)} `;
+  for (const t of PHONE_LINE_TOKENS) if (norm.includes(` ${t} `)) return PHONE_TYPE;
+  return null;
+}
+
+/**
+ * BRAND-MISMATCH guard: query names brand X, hit clearly belongs to a DIFFERENT brand → drop.
+ * A hit with no detectable brand is NOT dropped here (could be a legit unbranded listing of the right type;
+ * the type guard still applies). Returns true if the hit should be DROPPED.
+ */
+export function brandMismatch(queryBrand: string | null, title: string, attrBrand?: string): boolean {
+  if (!queryBrand) return false;
+  const hitBrand = detectBrand(title, attrBrand);
+  return hitBrand !== null && hitBrand !== queryBrand;
+}
+
+/**
+ * TYPE-MISMATCH guard: query names a concrete (non-accessory) TYPE, hit is a DIFFERENT concrete type OR an
+ * accessory → drop. (A stylus/case can never satisfy "phone".) If the query itself asks for an accessory
+ * type, we don't enforce a device type. A hit with no detectable type is kept (token relevance still ran).
+ * Returns true if the hit should be DROPPED.
+ */
+export function typeMismatch(queryType: ProductType | null, title: string): boolean {
+  if (!queryType || queryType.accessory) return false; // no device-type intent (or query wants accessory)
+  const hitType = detectProductType(title);
+  if (!hitType) return false; // unknown hit type → don't drop on type (relevance tokens still gate)
+  return hitType.type !== queryType.type; // any different concrete type, or any accessory, is dropped
 }
 
 /**
@@ -176,6 +325,12 @@ export function filterProductsByQuery<T extends ProductCandidate>(
   const tokens = electronicsTokens(query);
   if (tokens.length === 0) return [...items];
   const wantsAccessory = queryWantsAccessory(query) || (!!rankQuery && queryWantsAccessory(rankQuery));
+  // BRAND + TYPE identity from the FULL original query (rankQuery) — so a relaxed discovery FLOOR can never
+  // relax away the brand/type check (owner bug: "Samsung phone" relaxed to "samsung" must still be a Samsung
+  // PHONE, never an Adonit stylus). Falls back to `query` when no rankQuery was passed.
+  const identityQuery = rankQuery ?? query;
+  const queryBrand = detectBrand(identityQuery);
+  const queryType = detectQueryType(identityQuery);
   return items
     .map((item) => {
       const floor = scoreProductTitle(item.title, query, item.category ?? '');
@@ -189,6 +344,11 @@ export function filterProductsByQuery<T extends ProductCandidate>(
     .filter((s) => s.score > 0)
     // drop accessories/companions for a DEVICE query (unless the query asked for that accessory).
     .filter((s) => wantsAccessory || !isAccessoryTitle(s.item.title))
+    // BRAND enforcement: query named a brand, hit is a DIFFERENT known brand → drop (Adonit ≠ Samsung).
+    .filter((s) => !brandMismatch(queryBrand, s.item.title, (s.item as any).brand))
+    // TYPE enforcement: query named a concrete type, hit is a different concrete type/accessory → drop
+    // (a stylus can never satisfy "phone"). Accessory queries are exempt (handled above).
+    .filter((s) => wantsAccessory || !typeMismatch(queryType, s.item.title))
     .sort((a, b) => b.total - a.total)
     .map((s) => s.item);
 }

@@ -2,6 +2,41 @@
 
 > READ at task start. UPDATE at end with durable facts only. Keep lean; prune stale.
 
+## OWNER BUG "Samsung phone"→Adonit STYLUS — brand+type enforcement in electronics relevance (2026-06-27, 345/345 api, REAL-proven, NO git)
+- **BUG (live, real):** "Samsung phone" returned Adonit Jot Pro / Mini STYLUSES (7.5/8.0 KWD, Blink) — not
+  Samsung, not phones. ROOT CAUSE (two parts): (1) the typo-corrector snapped "phone"→"iphone" (1-edit), so
+  "Samsung phone"→"samsung iphone" (contradiction, 0 hits) → relaxed to bare "samsung" → provider fuzzy
+  returned accessories; (2) the relevance filter enforced only loose token presence — NO brand, NO product-type
+  → an other-brand/wrong-type item passed.
+- **FIX 1 (query-normalize.ts NO_CORRECT):** added generic PRODUCT-TYPE words (phone/smartphone/mobile/tablet/
+  laptop/tv/watch/fridge/headphones/…) so they NEVER fuzzy-snap to a brand token. "Samsung phone" now stays
+  "samsung phone" (was "samsung iphone"). NOTE: this supersedes the old "Xiaomi phone"→"xiaomi iphone"→relax
+  quirk noted elsewhere in memory — now "xiaomi phone" rung0, relaxes to "xiaomi". Ladder still relaxes a
+  brand+type query to the bare BRAND (never bare type) = identity-preserving discovery floor.
+- **FIX 2 (electronics-relevance.ts — THE CORE GUARD):** NEW `detectBrand(text,attrBrand?)` (BRAND_TOKENS whole-
+  word + BRAND_ALIASES iphone/galaxy/pixel→apple/samsung/google), `detectProductType(text)` (PRODUCT_TYPES
+  taxonomy; accessory types stylus/case/charger/… flagged; MORE-SPECIFIC types listed FIRST so Galaxy Watch=
+  watch, Pixel Buds=headphones, Galaxy Tab=tablet — brand-family tokens galaxy/pixel/iphone are deliberately
+  NOT phone keywords), `detectQueryType(query)` (=detectProductType, else infers phone from a bare phone-LINE
+  token pixel/galaxy/iphone so "Google Pixel 9" enforces phone). `brandMismatch`/`typeMismatch` helpers.
+  `filterProductsByQuery` now drops: hit-brand is a DIFFERENT known brand than the query's brand; hit is a
+  different concrete type / an accessory than the query's type. KEYED OFF rankQuery (FULL original query) so a
+  relaxed discovery FLOOR can NEVER relax away the brand/type identity. Accessory-asking queries exempt.
+- **FIX 3 (ACCESSORY_RE):** added carplay/car-play/wireless-car/car-charger + `for all (smart) phones` — drops
+  a HOCO "CarPlay For All Smart Phones … Apple" compatibility accessory that carried brand+"phones".
+- **DURABLE RULE:** a brand-named query (Dyson/Samsung/…) must return ONLY that brand or honest-empty — NEVER
+  leak another brand (so "vacuum cleaner Dyson" w/ only a Philips vacuum → []). A concrete-type query drops
+  accessories+other types (stylus≠phone). Brand/type enforcement uses the FULL query, immune to relax-ladder.
+- **REAL SPOT-CHECK (LIVE_FETCH=on real Xcite/Blink/Eureka, compiled resolver, isolated, NO git):** "Samsung
+  phone"→8 Samsung phones (A16/Z TriFold/A23/M33/A53/A13, 0 styluses — BUG FIXED), "Samsung phone 256GB"→4
+  (A53/Z Flip/Fold7/S26 Ultra all 256GB), "Apple phone"→6 (all iPhones, HOCO CarPlay dropped), "Sony
+  headphones"→3 real Sony cans (no TV/PS5), "Google Pixel 9"→5 real Pixels (no Buds), "iPhone 16"→5 real
+  iPhones (no case). "Dyson vacuum"→0 honest-empty (no Dyson vacuum in live feed; refuses other brands).
+- **Tests +14 (331→345):** electronics-relevance.spec brand+type block; query-normalize.spec (phone≠iphone snap,
+  Samsung relaxes to bare brand not bare type); electronics-resolver.spec (Samsung-phone resolver no-stylus,
+  Dyson brand-mismatch honest-empty; updated 2 relax pairs to same-brand titles). RUN: `cd apps/api && npx jest
+  --runInBand`.
+
 ## CLAUDE-REVAMP applied to Expo app (additive UI refinements) — RENDER-PROVEN (2026-06-27, 22/22 mobile, tsc clean, NO git)
 - **GOAL:** apply the reviewed Claude Design REVAMP adopt-list to the RN app additively (team/design/
   claude-design-review.md + team/marketing/claude-design-review.md). FONTS: keep Rubik+IBM Plex Sans

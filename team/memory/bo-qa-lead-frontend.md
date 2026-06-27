@@ -2,7 +2,23 @@
 
 > READ at task start. UPDATE at end with durable facts only. Keep lean; prune stale.
 
-## Current state (2026-06-27 — 300-CASE SUITE RE-RUN v3 @ commit 79bec27 → 291/300 (97%), report v3 delivered)
+## Current state (2026-06-27 — SUITE HARDENED 300→397 after a real-use coverage miss; brand/type/accessory cases added, NOT yet run)
+- **HONEST NOTE (own it):** the 300-case synthetic suite reported **~99% but OVER-STATED real-world quality.** First real use found a bug it missed — **"Samsung phone" → Adonit STYLUSES (wrong brand AND wrong product-type/accessory).** Happy-path cases were too narrow; some passed by luck. Coverage miss, not a model miss. Lesson locked: test brand×type×accessory COMBINATIONS like a real user, not synthetic happy cases.
+- **+97 NEW cases (now 397 total, E001–E192 / F001–F105 / R001–R100):** in `team/qa/search-test-cases.json` (valid, 0 dup IDs) + `.md` (synced: distribution table, FM table, GR6, new §4b).
+  - **FM-BRANDTYPE 58 (E101–E170 + AR mirrors):** 11 brands (Samsung/Apple/LG/Sony/Xiaomi/HP/Dell/Bosch/Philips/Huawei/Google) × 10 types (phone/laptop/TV/fridge/washer/AC/headphones/watch/tablet/vacuum), plausible combos only. Oracle: ONLY that brand+type OR honest-empty; FAIL on other brand / accessory / other type.
+  - **FM-ACCLEAK 22 (E159–E180):** 14 product≠accessory (Samsung phone≠stylus, laptop≠bag, AirPods≠ear tips, watch≠band, TV≠mount...) + 8 reverse (accessory query returns the accessory, not base product).
+  - **FM-REALWORLD 17 (E181–E192 + F101–F105):** casual phrasings ("i want to buy a samsung phone", "cheapest…", "best…deal", AR "اريد شراء موبايل سامسونج", food "something sweet").
+  - **NEW global rule GR6 — brand & type fidelity.** New regression locks (live failure): **E101, E107, E159, E181, E182, E183, E185** (every Samsung-phone path = Samsung phones only, no accessory/other brand).
+- **RUN GATE:** do NOT run live now (cost). These run AFTER the brand/type-relevance fix (currently in dev) lands. Until then it's a known false-red on FM-BRANDTYPE.
+
+## Prior state (2026-06-27 — LATEST-BUILD owner sim handoff @ commit e00dacd — Claude Design revamp + search ~99%)
+- **Built+served fresh for owner @ e00dacd:** build:types + build apps/api (both clean, no errors). Deleted apps/mobile dist+.expo+node_modules/.cache, `npx expo export --platform web --clear` fresh. SAME-ORIGIN confirmed: app.json extra.apiBaseUrl="" already set; bundle reads `extra.apiBaseUrl ?? 'http://localhost:3000'` so "" wins (the localhost:3000 in bundle is the unused fallback literal, NOT baked baseUrl — don't be alarmed by grep hit).
+- **Servers LEFT RUNNING:** API :3000 real-mode pid 1691 (`DOTENV_CONFIG_PATH=<root>/.env CLAUDE_PROVIDER=anthropic LIVE_FETCH=on SOCIAL_PROVIDER=apify OTP_PROVIDER=mock BILLING_PROVIDER=mock`, launched from ROOT, log /tmp/bo-api-3000.log). SPA+proxy :8765 pid 1695 (`node /tmp/bo-spa.js`, log /tmp/bo-spa-8765.log). Sim iPhone 17 Pro (8E782E23) BOOTED.
+- **VERIFIED:** /health 200 (claude=anthropic, liveFetch=on). Test POST /search/intent (food/rice) via :8765 proxy → 200 clarifying w/ live AI chips (machboos/biryani/...) → CREDIT TOPPED UP, full pipeline green. Proxy root+/health both 200.
+- **RENDER PROOF:** `team/qa/sim/handoff-e00dacd-categories.png` — category landing renders the new Claude Design revamp (cleaner icon tiles, Electronics/Food/RealEstate active, Cars Soon, RTL AR, EN toggle, login btn). Latest build confirmed live on sim.
+- Login code (mock OTP) = 000000. Normal flow asks ≥5 clarifiers (no skip; skipclar=1 is demo-only deep-link).
+
+## Prior state (2026-06-27 — 300-CASE SUITE RE-RUN v3 @ commit 79bec27 → 291/300 (97%), report v3 delivered)
 - **Report: `team/qa/search-run-report.md` (v3, OVERWRITTEN).** Build `79bec27` (AR/typo normalize, multi-word relax-and-retry, outage fallback, 100-area RE gazetteer). **Warm-corrected 291/300 (97%) vs 73% baseline (+24).** Electronics 99/100, Food 92/100, RE 100/100.
 - **RUN METHOD:** fresh build (build:types + build apps/api, clean). Isolated API **:3400** `PORT=3400 CLAUDE_PROVIDER=mock LIVE_FETCH=on SOCIAL_PROVIDER=apify APIFY_RESULTS_LIMIT=8 MIN_CLARIFIER_QUESTIONS=5 SQLITE_PATH=/tmp/bo-qa-run-v3.sqlite`, boot `node -r dotenv/config apps/api/dist/main.js` from ROOT. Harness `/tmp/bo-run300-v3.mjs` (CONC=1 sequential, empties re-probed 3× warm in-harness). Raw `/tmp/bo-run300-v3-results.json`; warm-corrected `/tmp/bo-run300-v3-corrected.json`. **API :3400 LEFT RUNNING.** Killed stale v2 :3300/:3301.
 - **CRITICAL: harness 3× re-probe is NOT enough for the FOOD (Talabat) lane under sequential load.** Raw harness = 275/300 (92%); 16 of 25 "fails" recovered on a 5× warm re-probe (`/tmp/bo-reprobe-fails.mjs`, 600ms spacing) → true 291/300. 14 of 16 recovered were food. ALWAYS warm-re-probe food empties ≥5× before recording FAIL. Electronics lane far less cache-sensitive.

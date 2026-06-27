@@ -139,6 +139,12 @@ const NO_CORRECT = new Set<string>([
   'original', 'value', 'best', 'new', 'cheap', 'good', 'top', 'kuwait', 'offer', 'deal', 'under',
   'want', 'need', 'looking', 'split', 'unit', 'inch', 'side', 'load', 'front', 'series', 'pro', 'max',
   'air', 'mini', 'plus', 'best', 'with', 'healthy', 'white', 'lamb',
+  // GENERIC PRODUCT-TYPE words must NEVER snap to a brand-specific catalog token. "phone" is 1 edit from
+  // "iphone" → snapping it turns "Samsung phone" into "Samsung iphone" (a contradiction that discovers
+  // nothing, then relaxes to a bare brand and leaks Samsung accessories/styluses). A type word is a real
+  // search term as-is; keep it so brand+type enforcement downstream can use it. (Owner bug: Samsung phone.)
+  'phone', 'phones', 'smartphone', 'mobile', 'tablet', 'laptop', 'tv', 'television', 'watch', 'speaker',
+  'monitor', 'console', 'fridge', 'refrigerator', 'headphones', 'earbuds', 'camera', 'printer', 'router',
 ]);
 
 /** Damerau-Levenshtein (handles the common transposition typo, e.g. samesung↔samsung). */
@@ -326,11 +332,18 @@ export function relaxQueryVariants(normalized: string): string[] {
 
   // RUNG 4 (last resort): a single strongest core token - a known brand, else a product-type word - so
   // an over-specific query ("front load washing machine LG") still bottoms out at a discoverable term.
+  //
+  // IDENTITY BOUND (owner bug "Samsung phone"→Adonit stylus): when the core carries BOTH a brand AND a
+  // product type, we relax DISCOVERY to the bare BRAND only (never to the bare TYPE) — searching the brand
+  // recalls that brand's catalog while the relevance FILTER (keyed off the full query) re-imposes the
+  // product type, so "Samsung phone" can surface Samsung phones but never a generic non-Samsung phone nor a
+  // Samsung accessory. Relaxing to the bare TYPE would discard the brand identity and invite cross-brand
+  // noise, so we do NOT do it. (The filter still enforces brand+type even on the brand-only rung.)
   if (core.length > 1) {
     const brand = core.find((t) => ELECTRONICS_BRANDS.has(t.toLowerCase()));
     const typeWord = core.find((t) => GENERIC_TYPE_WORDS.has(t.toLowerCase()));
     if (brand) push(brand);
-    else if (typeWord) push(typeWord);
+    else if (typeWord) push(typeWord); // type-only query (no brand) — bare type is a safe discovery floor.
   }
 
   return ladder.length ? ladder : [normalized];

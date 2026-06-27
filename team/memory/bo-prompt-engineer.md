@@ -40,5 +40,15 @@ Owner escalation baked into prompts as a role-tuned `## ...standards (ADR-007)` 
 ## Reusable wording standard (apply consistently)
 "REAL provider/catalog search (search endpoints/sitemaps), NOT hand-listed URL maps or mock-SKU lists" · "relevance must GENERALIZE (normalization/semantic/gazetteer), not per-row hand-tables" · "iterate until the AC holds across the case set — don't stop at first green (WORKFLOW.md §7)".
 
+## Status — pass 3: domain-grounding plan (2026-06-27)
+Owner: "the AI isn't trained for this project" (Samsung phone→stylus). Wrote `team/architecture/domain-grounding-plan.md` — the prompt/grounding half (embeddings half = architect, ADR-007 Q4).
+- Designed the missing **KW electronics brand→product-type taxonomy** data shape: `apps/api/src/offers/data/kw-electronics-taxonomy.json`, mirrors area-gazetteer `{en,ar,aliases,...}`. `productTypes[]` with **`kind: product|accessory`** (the disambiguation backbone — stylus/case/charger/screen_protector = accessory) × `brands[].makes[]`.
+- 5 deterministic relevance rules: type-dominates-brand, accessory-exclusion (drop accessories unless query names them), brand-only→product, valid-type gate, normalize-first. Fix Samsung-phone class with NO model call.
+- Wrote actual grounding block text (AR+EN): GROUNDING BLOCK → `clarify()`+`clarifierSet()` system; KW-FACTS BLOCK (رز بخاري=rice≠cake, Jabriya area, tenure/price) → `anthropic-social-extractor.ts` tool descriptions. Static→system prompt (prompt-cache for cost).
+- Schema add: `productType` + `kind` enum to `emit_clarifier.intentNormalized`.
+- Rollout: 1 taxonomy (deterministic, immediate) → 2 grounding → 3 embeddings (architect). Same vocab IS the embedding corpus.
+- Shared wording: "type dominates brand", "accessory ≠ product unless query names it", "resolve to {brand,productType,kind} slots not raw text", "ground on taxonomy; fall to embeddings for tail".
+- Handoff: bo-dev-lead wires taxonomy+blocks; bo-researcher/BA fills lists; bo-tech-architect owns pgvector infra.
+
 ## Open issues / next
 - Consider per-role demo-evidence path conventions (where screenshots are stored) if PO wants traceability.

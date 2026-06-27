@@ -154,6 +154,24 @@ describe('relaxQueryVariants (over-specific multi-word electronics → relaxed c
     expect(relaxQueryVariants('').length).toBeGreaterThanOrEqual(1);
     expect(relaxQueryVariants('iphone 16 pro max').length).toBeGreaterThanOrEqual(1);
   });
+
+  // OWNER bug "Samsung phone" → Adonit stylus. The relax ladder + the typo-corrector must NOT corrupt the
+  // query: "phone" is a generic product-type word and must NEVER snap to "iphone" (that turned
+  // "Samsung phone" into the contradictory "Samsung iphone", which discovered nothing and then relaxed to a
+  // bare brand that leaked accessories). The ladder must relax to the bare BRAND, never to a bare type.
+  it('does NOT snap the generic type word "phone" to "iphone" ("Samsung phone" stays a phone query)', () => {
+    expect(normalizeProviderQuery('Samsung phone', 'electronics')).toBe('samsung phone');
+    expect(normalizeProviderQuery('Apple phone', 'electronics')).toBe('apple phone');
+    expect(normalizeProviderQuery('Xiaomi phone', 'electronics')).toBe('xiaomi phone');
+  });
+
+  it('"Samsung phone" relaxes to the bare BRAND "samsung" (core-identity-preserving discovery floor)', () => {
+    const ladder = ladderFor('Samsung phone');
+    expect(ladder[0]).toBe('samsung phone'); // try the full term first
+    expect(ladder).toContain('samsung'); // relax to brand recalls Samsung catalog
+    // it must NOT bottom out at a bare generic "phone" (that would discard the brand identity).
+    expect(ladder).not.toContain('phone');
+  });
 });
 
 describe('food C4 — test-vendor exclusion + beverage down-rank', () => {

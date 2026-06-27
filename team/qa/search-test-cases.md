@@ -1,9 +1,11 @@
-# BestOffers — Search-Pipeline Hardening Test Suite (300 cases — 100 per sector)
+# BestOffers — Search-Pipeline Hardening Test Suite (397 cases)
 
-**Author:** bo-qa-lead-frontend · **Created:** 2026-06-27
-**Status:** **DESIGNED — NOT YET RUN.** Trigger the run AFTER SLICE Q1 (electronics catalog-free discovery) lands.
-**Owner bar:** an **extremely strong, issue-free search pipeline across ALL sectors** — search runs across every sector, so each sector gets a full 100-case exhaustive suite (not 100 split).
-**Machine-readable harness:** `team/qa/search-test-cases.json` (the runnable source of truth — 300 cases).
+**Author:** bo-qa-lead-frontend · **Created:** 2026-06-27 · **Last updated:** 2026-06-27 (brand/type/accessory hardening)
+**Status:** **DESIGNED — NOT YET RUN.** The original 300 run AFTER SLICE Q1; the **97 new brand/type/accessory/real-world cases run AFTER the brand/type-relevance fix (currently in dev) lands.**
+**Owner bar:** an **extremely strong, issue-free search pipeline across ALL sectors** — search runs across every sector, so each sector gets a full exhaustive suite (not split).
+**Machine-readable harness:** `team/qa/search-test-cases.json` (the runnable source of truth — 397 cases).
+
+> **WHY +97 (honest coverage note):** the 300-case synthetic suite reported **~99%**, but the FIRST real-world use found a bug it missed — **"Samsung phone" returned Adonit STYLUSES (wrong brand AND wrong product-type/accessory).** The synthetic happy-path cases were too narrow; some passed by luck. The lesson: **test like a REAL user across combinations, not the synthetic happy cases.** These 97 cases close that class: every brand×type combo, accessory-leak traps both directions, and casual real-user phrasings — with the live failure locked as a regression.
 **Oracle sources:** `team/architecture/ADR-007-search-quality.md` (known weaknesses) · `team/analysis/feature-acceptance-criteria.md` (F-SR1) · `team/analysis/clarifier-question-sets.md` · `apps/api/src/search/clarifier-sets.ts`.
 
 > Every PASS/FAIL is checked against the AC oracle, not vibes. A case that returns an honest-empty (with broaden suggestions) where no live data exists is **PASS**, not FAIL. Dumping unrelated cards to look "full" is **FAIL**. Per ADR-007, a search feature is not "passed" until it holds across the WHOLE case set — one happy-path pass is not a pass.
@@ -14,10 +16,10 @@
 
 | Sector | Count | AR / EN |
 |--------|-------|---------|
-| Electronics (E001–E100) | 100 | 34 AR / 66 EN |
-| Food (F001–F100) | 100 | 40 AR / 60 EN |
+| Electronics (E001–E192) | 192 | 47 AR / 145 EN |
+| Food (F001–F105) | 105 | 41 AR / 64 EN |
 | Real estate (R001–R100) | 100 | 49 AR / 51 EN |
-| **Total** | **300** | **123 AR / 177 EN** |
+| **Total** | **397** | **137 AR / 260 EN** |
 
 Failure-mode spread (so fixes are targetable):
 
@@ -25,22 +27,27 @@ Failure-mode spread (so fixes are targetable):
 |------|-------|-----------------|
 | `baseline` | 59 | Common products/dishes/areas that must already work |
 | `FM-CATALOG` | 67 | Electronics off the 16-item `MOCK_SKUS` wall (ADR-007 RC#1, the Q1 fix) — every non-phone/laptop type |
+| `FM-BRANDTYPE` | **58 (NEW)** | **Brand × product-type combos** (11 brands × 10 types, plausible combos only). Each must return ONLY that brand AND that type — never another brand, never an accessory, never a different type. **The "Samsung phone → Adonit stylus" bug class.** |
 | `FM-RELEVANCE` | 42 | Category-routing traps (rice↔cake), long-tail dishes not in the synonym table |
 | `FM-AREA` | 61 | RE wrong-area leak + unlisted-area resolution (12-area allow-list vs ~60, ADR-007 Q3) |
-| `FM-TENURE` | 13 | Rent vs sale separation (tenure inferred, not asked) |
-| `FM-PRICEUNIT` | 7 | Sale price shown as monthly rent (the 400k/300k/500k-rent class) |
+| `FM-ACCLEAK` | **22 (NEW)** | **Accessory-leak traps, both directions.** Product query must NOT return its accessory (phone≠stylus/case/charger; laptop≠bag/stand); and the reverse — the accessory query returns the accessory, not the base product. |
 | `FM-TYPO` | 19 | Misspelling / transliteration drift (machboos/machbous, ayfon, salmia, jabreya) |
-| `FM-BRANDONLY` | 6 | Brand-only queries (Apple/Samsung/LG/Sony/Huawei) → that brand's catalog |
-| `FM-OFFCATALOG` | 13 | Generic/uncovered/gibberish/off-category → honest-empty, never a dump |
+| `FM-REALWORLD` | **17 (NEW)** | **Casual real-user phrasings** ("i want to buy a samsung phone", "cheapest…", "best…deal", "near me", AR equivalents) — must route as well as a clean keyword query. |
+| `FM-TENURE` | 13 | Rent vs sale separation (tenure inferred, not asked) |
 | `FM-CONSTRAINT` | 13 | Budget/spec/bedrooms/furnished/cheapest constraints handled, never mislabeled |
+| `FM-OFFCATALOG` | 13 | Generic/uncovered/gibberish/off-category → honest-empty, never a dump |
+| `FM-PRICEUNIT` | 7 | Sale price shown as monthly rent (the 400k/300k/500k-rent class) |
+| `FM-BRANDONLY` | 6 | Brand-only queries (Apple/Samsung/LG/Sony/Huawei) → that brand's catalog |
 
 Per-sector failure-mode counts (from the JSON `meta.breakdown.per_sector`):
 
-- **Electronics (100):** FM-CATALOG 67, baseline 11, FM-TYPO 7, FM-BRANDONLY 6, FM-OFFCATALOG 5, FM-CONSTRAINT 4.
-- **Food (100):** baseline 48, FM-RELEVANCE 42, FM-TYPO 7, FM-OFFCATALOG 3.
+- **Electronics (192, 47 AR / 145 EN):** FM-CATALOG 67, FM-BRANDTYPE 58, FM-ACCLEAK 22, baseline 11, FM-TYPO 7, FM-BRANDONLY 6, FM-REALWORLD 12, FM-OFFCATALOG 5, FM-CONSTRAINT 4.
+- **Food (105):** baseline 48, FM-RELEVANCE 42, FM-TYPO 7, FM-REALWORLD 5, FM-OFFCATALOG 3.
 - **Real estate (100):** FM-AREA 61, FM-TENURE 13, FM-CONSTRAINT 9, FM-PRICEUNIT 7, FM-OFFCATALOG 5, FM-TYPO 5.
 
-**ADR-007 live failures locked as regression cases** (`meta.adr007_regression_locks`): E006/E007 (Dish washing Machine + غسالة صحون 0-results), F001/F008 (rice↔cake both directions), F002 (Bukhari→cake), F003 (machboos drift), F004/F005 (machboos/machbous transliteration), F009 (كيك), R001/R002 (Jabriya wrong-area), R009–R015 (unlisted areas Zahra/Mishref/Bayan/Rumaithiya/Sabah), R024 (300k-rent).
+**Live failures locked as regressions** (`meta.live_failure_regressions.cases`): **E101 / E107 / E159 / E181 / E182 / E183 / E185** — the **"Samsung phone" → Adonit stylus** class (Samsung phone only; never an accessory; never another brand). These MUST hold before the suite passes.
+
+**ADR-007 live failures locked as regression cases** (`meta.adr007_regression_locks`): E006/E007 (Dish washing Machine + غسالة صحون 0-results), F001/F008 (rice↔cake both directions), F002 (Bukhari→cake), F003 (machboos drift), F004/F005 (machboos/machbous transliteration), F009 (كيك), R001/R002 (Jabriya wrong-area), R009–R015 (unlisted areas Zahra/Mishref/Bayan/Rumaithiya/Sabah), R024 (300k-rent), plus the live brand/type locks above.
 
 ---
 
@@ -66,6 +73,7 @@ Terminal `ResultCard` fields the oracle reads: `productName`, `providerName`, `p
 | **GR3 — no unrelated dump** | No off-category/off-intent filler. Honest-empty beats a padded list. |
 | **GR4 — honest empty** | A genuine no-match `state='empty'` MUST carry ≥1 `broadenSuggestion` (never a bare 0 — F-SR1 AC-14, D-V2-2). A **provider-failure** empty must be flagged distinctly (`coverage_reason`, ADR-007 Q5) and is **not** a clean PASS. |
 | **GR5 — price sanity** | Electronics within plausible KWD retail; food dish within plausible order KWD; RE **rent 50–3,000 KWD/mo**, **sale ≥10,000 KWD**. A rent card >3,000 KWD/mo = **FAIL**. |
+| **GR6 — brand & type fidelity** *(NEW)* | When a query names a **brand** and/or a **product-type**, every card must match BOTH. A different brand, a different product-type, or an **accessory** of the product (stylus/case/charger/bag/band/mount) is a **FAIL**, even if it's "close". Honest-empty beats a wrong-brand/accessory fill. This is the rule the "Samsung phone → Adonit stylus" miss violated. |
 
 ---
 
@@ -95,7 +103,23 @@ Terminal `ResultCard` fields the oracle reads: `productName`, `providerName`, `p
 
 ---
 
-## 5. Food (100) — F001–F100
+## 4b. Brand × product-type, accessory & real-world hardening (NEW — E101–E192, F101–F105)
+
+> **Added 2026-06-27 after a real-use coverage miss.** The synthetic 300-suite reported ~99% but missed **"Samsung phone" → Adonit STYLUSES** (wrong brand AND wrong product-type/accessory). These 97 cases make that class un-slippable. **RUN AFTER the brand/type-relevance fix (in dev) lands** — running now is a known false-red.
+
+**Brand × product-type combos (FM-BRANDTYPE, E101–E170 incl. AR mirror).** 11 brands (Samsung, Apple, LG, Sony, Xiaomi, HP, Dell, Bosch, Philips, Huawei, Google) × 10 types (phone, laptop, TV, fridge, washer, AC, headphones, watch, tablet, vacuum), restricted to combos each brand **plausibly makes** (e.g. Bosch→fridge/washer/vacuum, not phone; Dell→laptop only). 47 EN combos + 11 AR flagship mirrors = 58. **Oracle for every one:** PASS = ≥1 card that is BOTH that brand AND that type (real price+deeplink) **OR** an honest-empty (`state='empty'` + `broadenSuggestions`/`coverage_reason`); **FAIL** = any other-brand card, any accessory (stylus/case/charger/cable/cover), or any other product-type. No "fill the list" leak is acceptable.
+
+**Accessory-leak traps (FM-ACCLEAK, E159–E180), both directions:**
+- **Product ≠ its accessory (14):** "Samsung phone" ≠ stylus/Adonit *(LIVE-FAILURE LOCK)*, "iPhone 17" ≠ case/charger, "MacBook Pro" ≠ bag/stand, "laptop" ≠ laptop bag, "AirPods Pro" ≠ ear tips/case, "Apple Watch" ≠ band, "iPad Pro" ≠ Pencil/folio, "Samsung TV" ≠ wall mount/remote, "PlayStation 5" ≠ controller-only/game, "gaming laptop" ≠ mouse/cooling pad, etc. FAIL = any accessory card surfaces for a product query.
+- **Reverse — accessory query returns the accessory (8):** "phone case", "Samsung stylus", "iPhone screen protector", "laptop bag", "Apple Watch band", "AirPods case", "phone charger", "TV wall mount" → the accessory (or honest-empty), NOT the base product dumped.
+
+**Real-world phrasings (FM-REALWORLD, E181–E192 + F101–F105, 17).** How a real user actually types: "i want to buy a samsung phone", "best samsung phone deal", "cheap samsung phone", "samsung mobile", "looking for an apple laptop", "need a new tv", "which fridge is cheapest", "recommend me a laptop", AR "اريد شراء موبايل سامسونج" / "ابغى لابتوب رخيص"; food "i'm hungry, show me burgers", "best pizza near me", "something sweet", "ابغى اكل صيني", "family meal deal". Must route as well as a clean keyword query — same brand/type/accessory rules apply.
+
+**Live-failure regression locks (must hold before PASS):** E101, E107, E159, E181, E182, E183, E185 — every Samsung-phone path returns **Samsung phones only**, never an accessory, never another brand.
+
+---
+
+## 5. Food (105) — F001–F105
 
 > The marquee trap is **category routing: rice must NOT return cake, and cake must NOT return rice.** Long-tail dishes (sushi/ramen/tacos/manakish/falafel/pasta/noodles) are the ADR-007 §1.2 "not in the synonym table" cases — relevant or honest-empty, never random restaurants. Transliteration variants test the AR↔EN drift ADR-007 names.
 
