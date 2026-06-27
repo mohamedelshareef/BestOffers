@@ -61,7 +61,10 @@ const STOP_WORDS = new Set<string>([
   'the', 'a', 'an', 'and', 'or', 'for', 'with', 'of', 'in', 'best', 'new', 'buy', 'price', 'cheap',
   'good', 'top', 'kuwait', 'offer', 'offers', 'deal', 'deals', 'me', 'i', 'want', 'need', 'looking',
   'machine', 'device', 'set',
-  'و', 'في', 'من', 'على', 'مع', 'افضل', 'جديد', 'سعر', 'رخيص', 'الكويت', 'عرض', 'جهاز', 'اريد', 'ابي',
+  // generic filler that over-constrains a multi-word query: "air conditioner split UNIT" must not require
+  // the word "unit" in every title (no real AC title says "unit"). These carry no product identity.
+  'unit', 'units', 'cheapest', 'latest', 'brand', 'model', 'official', 'genuine', 'original',
+  'و', 'في', 'من', 'على', 'مع', 'افضل', 'جديد', 'سعر', 'رخيص', 'الكويت', 'عرض', 'جهاز', 'اريد', 'ابي', 'ارخص',
 ]);
 
 /**

@@ -19,6 +19,21 @@ export interface ResolvedOffer {
 }
 
 /**
+ * Why a resolve returned the offers it did (ADR-007 Q5 / GR4 — truthful empty-state). When `offers` is
+ * empty the `coverageReason` tells whether providers FAILED (timeout/error → suspect empty, must be
+ * flagged) or every provider answered cleanly and nothing matched (genuine empty).
+ */
+export type CoverageReason = 'ok' | 'genuine_no_match' | 'provider_failure' | 'timeout';
+
+export interface ResolveResult {
+  offers: ResolvedOffer[];
+  coverageReason: CoverageReason;
+  /** Providers enabled/tried + how many failed, for telemetry. */
+  providersTried: number;
+  providersFailed: number;
+}
+
+/**
  * Provider ids that have a LIVE adapter. Their mock offers are dropped when LIVE_FETCH is on.
  * S2.6 Slice A: X-cite + Blink (Tier-1). ADR-003 Slice B: Eureka (Tier-2, Algolia XHR sniff).
  */
@@ -87,48 +102,95 @@ export class OffersService {
   }
 
   async resolveOffers(intent: IntentNormalized): Promise<ResolvedOffer[]> {
-    // REAL ESTATE sector (ADR-006): flats come ONLY from the social (Instagram) mock lane — no portal
-    // adapter yet. Mock-first, so it runs offline/in tests (NOT gated by LIVE_FETCH). The AI matches
-    // the seeded flat posts to the intent (area/rooms).
-    if (intent.category === 'realestate') {
-      return this.resolveSocial(intent, 'realestate');
-    }
-
-    // FOOD sector: Talabat (ADR-005, LIVE, gated by LIVE_FETCH) MERGED with the social IG mock lane
-    // (ADR-006) so Food results include IG-only restaurant/meal-prep/dessert offers alongside Talabat.
-    if (intent.category === 'food') {
-      const [talabat, social] = await Promise.all([
-        this.liveEnabled
-          ? this.foodResolver.resolve(intent).catch(() => [] as ResolvedOffer[])
-          : Promise.resolve([] as ResolvedOffer[]),
-        this.resolveSocial(intent, 'food'),
-      ]);
-      return [...talabat, ...social];
-    }
-
-    // ELECTRONICS (everything else). ADR-007 Q1: when LIVE_FETCH=on, discovery is CATALOG-FREE —
-    // call the providers' real search with the query text and synthesize a SKU/offer per live hit, so
-    // ANY product the providers sell is searchable (the "Dish washing Machine" → 0 results bug). The
-    // in-code MOCK_SKUS is only a fixture/offline fallback (LIVE_FETCH=off) or a safety net if the live
-    // search returns nothing (e.g. a seeded model with no live hit this run).
-    if (this.liveEnabled) {
-      let live: ResolvedOffer[] = [];
-      try {
-        live = await this.electronicsResolver.resolve(intent);
-      } catch {
-        live = []; // never block the query on the live layer
-      }
-      if (live.length > 0) return live;
-    }
-    return this.resolveForSkus(intent, this.matchSkus(intent));
+    return (await this.resolveOffersWithCoverage(intent)).offers;
   }
 
-  /** Resolve the social (Instagram) mock lane for a vertical; never blocks the query on failure. */
-  private async resolveSocial(intent: IntentNormalized, sector: 'food' | 'realestate'): Promise<ResolvedOffer[]> {
+  /**
+   * Resolve offers AND report coverage (ADR-007 Q5 / GR4). The offers are identical to `resolveOffers`;
+   * additionally `coverageReason` distinguishes a PROVIDER-FAILURE/TIMEOUT empty (suspect — a provider
+   * threw or timed out, so the empty is not trustworthy and must be flagged) from a GENUINE no-match
+   * (every provider answered cleanly, nothing stocks the term). A non-empty result is always `ok`.
+   */
+  async resolveOffersWithCoverage(intent: IntentNormalized): Promise<ResolveResult> {
+    // REAL ESTATE sector (ADR-006): flats come ONLY from the social (Instagram) mock lane — no portal
+    // adapter yet. Mock-first, so it runs offline/in tests (NOT gated by LIVE_FETCH).
+    if (intent.category === 'realestate') {
+      const r = await this.resolveSocialWithCoverage(intent, 'realestate');
+      return this.coverageOf(r.offers, r.tried, r.failed);
+    }
+
+    // FOOD sector: Talabat (ADR-005, LIVE) MERGED with the social IG mock lane (ADR-006).
+    if (intent.category === 'food') {
+      const [talabat, social] = await Promise.all([
+        this.resolveFoodWithCoverage(intent),
+        this.resolveSocialWithCoverage(intent, 'food'),
+      ]);
+      const offers = [...talabat.offers, ...social.offers];
+      return this.coverageOf(
+        offers,
+        talabat.tried + social.tried,
+        talabat.failed + social.failed,
+      );
+    }
+
+    // ELECTRONICS (everything else). ADR-007 Q1: catalog-free real-provider discovery; MOCK_SKUS is only
+    // the offline/test fallback (LIVE_FETCH=off) or a safety net when live search returns nothing.
+    if (this.liveEnabled) {
+      try {
+        const live = await this.electronicsResolver.resolveWithCoverage(intent);
+        if (live.offers.length > 0) return this.coverageOf(live.offers, live.providersTried, live.providersFailed);
+        // Live returned nothing: if a provider FAILED, this is a suspect (provider-failure) empty — flag
+        // it rather than silently falling to the mock catalog and pretending the providers had no match.
+        if (live.providersFailed > 0) {
+          const fallback = this.resolveForSkus(intent, this.matchSkus(intent));
+          const offers = await fallback;
+          if (offers.length > 0) return this.coverageOf(offers, live.providersTried, live.providersFailed);
+          return { offers: [], coverageReason: 'provider_failure', providersTried: live.providersTried, providersFailed: live.providersFailed };
+        }
+        // Clean empty from every provider → fall through to the mock catalog (offline safety net).
+        const offers = await this.resolveForSkus(intent, this.matchSkus(intent));
+        return this.coverageOf(offers, live.providersTried, live.providersFailed);
+      } catch {
+        // Whole electronics live layer threw → provider failure; try the offline catalog as a safety net.
+        const offers = await this.resolveForSkus(intent, this.matchSkus(intent));
+        if (offers.length > 0) return this.coverageOf(offers, this.adapters.length, this.adapters.length);
+        return { offers: [], coverageReason: 'provider_failure', providersTried: this.adapters.length, providersFailed: this.adapters.length };
+      }
+    }
+    const offers = await this.resolveForSkus(intent, this.matchSkus(intent));
+    return this.coverageOf(offers, 0, 0); // LIVE_FETCH=off: mock-only, no real providers → never a provider_failure
+  }
+
+  /** Build a ResolveResult: non-empty → ok; empty + a failure → provider_failure; else genuine_no_match. */
+  private coverageOf(offers: ResolvedOffer[], tried: number, failed: number): ResolveResult {
+    if (offers.length > 0) return { offers, coverageReason: 'ok', providersTried: tried, providersFailed: failed };
+    const coverageReason: CoverageReason = failed > 0 ? 'provider_failure' : 'genuine_no_match';
+    return { offers, coverageReason, providersTried: tried, providersFailed: failed };
+  }
+
+  /** Social (Instagram) lane for a vertical; reports whether the lane FAILED (vs cleanly empty). */
+  private async resolveSocialWithCoverage(
+    intent: IntentNormalized,
+    sector: 'food' | 'realestate',
+  ): Promise<{ offers: ResolvedOffer[]; tried: number; failed: number }> {
+    const tried = this.socialAdapters.filter((a) => a.enabled && a.sector === sector).length;
     try {
-      return await this.socialResolver.resolve(intent, sector);
+      return { offers: await this.socialResolver.resolve(intent, sector), tried, failed: 0 };
     } catch {
-      return [];
+      return { offers: [], tried, failed: tried || 1 };
+    }
+  }
+
+  /** Food (Talabat) lane; reports whether the lane FAILED. Disabled (empty, no failure) when LIVE_FETCH=off. */
+  private async resolveFoodWithCoverage(
+    intent: IntentNormalized,
+  ): Promise<{ offers: ResolvedOffer[]; tried: number; failed: number }> {
+    if (!this.liveEnabled) return { offers: [], tried: 0, failed: 0 };
+    const tried = this.foodAdapters.filter((a) => a.enabled).length;
+    try {
+      return { offers: await this.foodResolver.resolve(intent), tried, failed: 0 };
+    } catch {
+      return { offers: [], tried, failed: tried || 1 };
     }
   }
 

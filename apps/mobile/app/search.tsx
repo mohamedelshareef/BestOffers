@@ -45,7 +45,12 @@ const CAT_PLACEHOLDER: Record<Sector, { ar: string; en: string }> = {
 export default function SearchScreen() {
   const session = useSession();
   const { locale, toggle } = useLocale();
-  const params = useLocalSearchParams<{ cat?: string; resume?: string; q?: string }>();
+  const params = useLocalSearchParams<{ cat?: string; resume?: string; q?: string; skipclar?: string }>();
+  // DEV/DEMO ONLY (non-default): `?q=...&cat=...&skipclar=1` auto-answers every clarifier with
+  // __skip__ and runs straight through to the terminal results/empty screen (final product cards) —
+  // mirrors the API harness's /search/intent → /search/answer(__skip__) path, but in the UI. The
+  // normal flow (no skipclar) still asks the full ≥5 clarifier set.
+  const skipClarifiers = params.skipclar === '1';
   // `cat` is required; default to electronics if a stray deep-link lacks it.
   const cat: Sector =
     params.cat === 'food' ? 'food' : params.cat === 'realestate' ? 'realestate' : 'electronics';
@@ -95,10 +100,32 @@ export default function SearchScreen() {
     refreshQuota();
   }
 
+  /**
+   * DEV/DEMO skip-loop: given a clarifying response, keep POSTing /search/answer with __skip__ for the
+   * first presented question until the server reaches a terminal state (results | empty). Bounded by a
+   * hard cap so a misbehaving server can never spin forever. Drives the SAME path the API harness uses.
+   */
+  async function autoSkipToTerminal(res: SearchResponse): Promise<SearchResponse> {
+    let cur = res;
+    for (let i = 0; cur.state === 'clarifying' && i < 12; i++) {
+      const dim = cur.questions?.[0]?.dimension;
+      if (!dim) break;
+      cur = await search.submitAnswer(
+        { searchSessionId: cur.searchSessionId, dimension: dim, answer: '__skip__' },
+        pseudo,
+      );
+    }
+    return cur;
+  }
+
   async function execute(call: SearchCall, onBlockedPhase: Phase): Promise<void> {
     setPhase('searching');
     try {
-      applyResponse(await blocked.current.run(call));
+      let res = await blocked.current.run(call);
+      if (skipClarifiers && res.state === 'clarifying') {
+        res = await autoSkipToTerminal(res);
+      }
+      applyResponse(res);
     } catch (e) {
       if (e instanceof PaywallRequired) {
         setPhase(onBlockedPhase);

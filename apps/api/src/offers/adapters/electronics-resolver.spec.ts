@@ -112,4 +112,37 @@ describe('ElectronicsOfferResolver — catalog-free discovery (ADR-007 Q1)', () 
     const out = await resolver.resolve(intent('dishwasher'));
     expect(out).toEqual([]);
   });
+
+  // ADR-007 Q5 / GR4 — coverage telemetry: a failing provider on an empty result is FLAGGED, not silent.
+  describe('coverage (provider-failure vs genuine no-match)', () => {
+    it('flags providersFailed when a provider throws and the result is empty', async () => {
+      const bad = new FakeAdapter('prov_eureka', 'Eureka', []);
+      bad.discover = async () => {
+        throw new Error('Eureka timeout');
+      };
+      const resolver = new ElectronicsOfferResolver([bad], new InMemoryOfferCache());
+      const r = await resolver.resolveWithCoverage(intent('dishwasher'));
+      expect(r.offers).toEqual([]);
+      expect(r.providersTried).toBe(1);
+      expect(r.providersFailed).toBe(1); // a SUSPECT empty — must be flagged upstream as provider_failure
+    });
+
+    it('reports a clean (failure-free) coverage when a provider answers but has no match', async () => {
+      const clean = new FakeAdapter('prov_blink', 'Blink', [offer('b1', 'Samsung Microwave 28L', 39000)]);
+      const resolver = new ElectronicsOfferResolver([clean], new InMemoryOfferCache());
+      const r = await resolver.resolveWithCoverage(intent('dishwasher'));
+      expect(r.offers).toEqual([]);
+      expect(r.providersFailed).toBe(0); // genuine no-match: the provider answered, nothing relevant
+    });
+
+    it('a slow provider that exceeds its deadline counts as failed but never blocks the others', async () => {
+      const good = new FakeAdapter('prov_blink', 'Blink', [offer('b1', 'Bosch Dishwasher 60cm', 159000)]);
+      const slow = new FakeAdapter('prov_eureka', 'Eureka', [offer('e1', 'Bosch Dishwasher 60cm', 162000)]);
+      slow.discover = () => new Promise(() => {}); // never resolves → hits the per-provider deadline
+      const resolver = new ElectronicsOfferResolver([good, slow], new InMemoryOfferCache());
+      const r = await resolver.resolveWithCoverage(intent('dishwasher'));
+      expect(r.offers.length).toBe(1); // good provider's partial result still returned
+      expect(r.providersFailed).toBe(1); // the hung provider is flagged
+    }, 12000);
+  });
 });

@@ -13,6 +13,7 @@ import {
   isTestRestaurant,
   normalizeFoodText,
 } from './food-relevance';
+import { normalizeProviderQuery } from './query-normalize';
 
 /** Per-tier timeout (ADR-003 §4); food rides the http tier but allows a touch more for the menu API. */
 const FOOD_TIER_TIMEOUT_MS: Record<string, number> = {
@@ -37,8 +38,11 @@ export class FoodOfferResolver {
   ) {}
 
   async resolve(intent: IntentNormalized): Promise<ResolvedOffer[]> {
-    const queryText = (intent.model ?? intent.category ?? '').trim().toLowerCase();
-    if (!queryText) return [];
+    const raw = (intent.model ?? intent.category ?? '').trim().toLowerCase();
+    if (!raw) return [];
+    // C2 fix: AR→EN + typo normalization so Talabat slug discovery + the relevance filter both key on the
+    // EN-canonical dish/vendor term (تشيز كيك→cheesecake, ماكدونالدز→mcdonalds, biryni→biryani).
+    const queryText = normalizeProviderQuery(raw, 'food');
 
     const settled = await Promise.allSettled(
       this.adapters
@@ -89,6 +93,7 @@ export class FoodOfferResolver {
         allDishes.map((d) => ({ ...d, category: d.attrs.category })),
         queryText,
         restaurantQuery,
+        { unmatchedEmpty: true }, // Talabat menu lane: an off-menu/gibberish term → honest-empty, never a dump (C4/C5)
       );
 
       if (normalized.length === 0) {

@@ -5,6 +5,7 @@ import {
   isCondiment,
   isRecognizedFoodToken,
   isTestRestaurant,
+  MATCHED_RESULT_CAP,
   normalizeFoodText,
   scoreDish,
 } from './food-relevance';
@@ -161,6 +162,43 @@ describe('food-relevance (bug fix: "rice" returns random food)', () => {
       expect(isRecognizedFoodToken('برياني')).toBe(true);
       expect(isRecognizedFoodToken('kfc')).toBe(false);
       expect(isRecognizedFoodToken('king')).toBe(false);
+    });
+  });
+
+  // ── OWNER OVER-DUMP BUG (2026-06-27): "sushi" → 243 cards (whole-menu dump). ──
+  describe('over-dump cap (OWNER BUG: "sushi" → 243 cards)', () => {
+    /** A huge menu of N matching dishes + some unrelated dishes, mimicking a provider's whole long-tail. */
+    function bigMenu(term: string, matching: number, unrelated: number): (DishCandidate & { id: string })[] {
+      const out: (DishCandidate & { id: string })[] = [];
+      for (let i = 0; i < matching; i++) out.push({ id: `m${i}`, title: `${term} roll #${i}`, category: term });
+      for (let i = 0; i < unrelated; i++) out.push({ id: `u${i}`, title: `Burger #${i}`, category: 'Burgers' });
+      return out;
+    }
+
+    it('"sushi" is now a recognized DISH term (no longer flips to restaurant-mode whole-menu dump)', () => {
+      expect(isRecognizedFoodToken('sushi')).toBe(true);
+      expect(expandFoodQuery('sushi').matchedGroup).toBe(true);
+    });
+
+    it('"sushi" caps a 200-item matching menu to MATCHED_RESULT_CAP, drops the unrelated burgers', () => {
+      const ids = filterDishesByQuery(bigMenu('Sushi', 200, 50), 'sushi', false).map((d) => d.id);
+      expect(ids.length).toBe(MATCHED_RESULT_CAP); // capped — never a 243-card dump
+      expect(ids.every((id) => id.startsWith('m'))).toBe(true); // only relevant sushi dishes
+      expect(MATCHED_RESULT_CAP).toBeLessThan(60); // a sane, scannable set
+    });
+
+    it('"pizza" and "coffee" are likewise capped + relevance-filtered', () => {
+      const pizza = filterDishesByQuery(bigMenu('Pizza', 120, 30), 'pizza', false);
+      const coffee = filterDishesByQuery(bigMenu('Coffee', 120, 30), 'coffee', false);
+      expect(pizza.length).toBe(MATCHED_RESULT_CAP);
+      expect(coffee.length).toBe(MATCHED_RESULT_CAP);
+      expect(pizza.every((d) => (d as any).id.startsWith('m'))).toBe(true);
+      expect(coffee.every((d) => (d as any).id.startsWith('m'))).toBe(true);
+    });
+
+    it('a small matching set is returned in full (cap only bites the long tail)', () => {
+      const ids = filterDishesByQuery(bigMenu('Sushi', 5, 10), 'sushi', false).map((d) => d.id);
+      expect(ids.length).toBe(5);
     });
   });
 });

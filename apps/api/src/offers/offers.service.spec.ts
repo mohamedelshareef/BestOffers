@@ -59,3 +59,48 @@ describe('OffersService — no empty result when offers exist for the model (BUG
     expect(resolved.length).toBe(0); // genuinely no SKU → the ONLY empty case
   });
 });
+
+// ── ADR-007 Q5 / GR4 — coverage_reason (provider-failure vs genuine no-match) ──
+describe('OffersService.resolveOffersWithCoverage — coverage_reason (ADR-007 Q5)', () => {
+  const offers = new OffersService();
+
+  it("non-empty result → coverageReason 'ok'", async () => {
+    const intent: IntentNormalized = {
+      category: 'smartphone',
+      brand: 'Apple',
+      model: 'iPhone 17 Pro Max',
+      constraints: {},
+    };
+    const r = await offers.resolveOffersWithCoverage(intent);
+    expect(r.offers.length).toBeGreaterThan(0);
+    expect(r.coverageReason).toBe('ok');
+  });
+
+  it("empty + every provider clean → 'genuine_no_match' (no provider failed)", async () => {
+    const intent: IntentNormalized = {
+      category: 'smartphone',
+      brand: 'Apple',
+      model: 'iPhone 99 Imaginary',
+      constraints: {},
+    };
+    const r = await offers.resolveOffersWithCoverage(intent);
+    expect(r.offers.length).toBe(0);
+    expect(r.coverageReason).toBe('genuine_no_match');
+    expect(r.providersFailed).toBe(0);
+  });
+
+  it("empty + a lane THREW → 'provider_failure' (suspect empty is flagged, not silent)", async () => {
+    const svc = new OffersService();
+    // Force the real-estate social lane to fail (provider down) so the result is empty BUT suspect.
+    (svc as any).socialResolver = {
+      resolve: async () => {
+        throw new Error('social lane failed');
+      },
+    };
+    const intent: IntentNormalized = { category: 'realestate', model: 'flat in jabriya', constraints: {} };
+    const r = await svc.resolveOffersWithCoverage(intent);
+    expect(r.offers.length).toBe(0);
+    expect(r.coverageReason).toBe('provider_failure'); // NOT genuine_no_match — the lane failed
+    expect(r.providersFailed).toBeGreaterThan(0);
+  });
+});

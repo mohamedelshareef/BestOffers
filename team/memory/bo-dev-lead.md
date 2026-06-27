@@ -2,6 +2,106 @@
 
 > READ at task start. UPDATE at end with durable facts only. Keep lean; prune stale.
 
+## ADR-007 300-case CLUSTER FIXES C1/C2/C3/C4/C5 (2026-06-27, 285/285 api, REAL-proven, NO git)
+- **ROOT CAUSE (C1+C2, 58/80 fails, ONE shared):** provider search (Eureka/Blink elec, Talabat food) indexes
+  EN-canonical terms; AR queries (غسالة صحون/تشيز كيك) + typos (refrigirator/biryni) + appliance vocab were
+  passed VERBATIM → 0 hits despite real stock. **FIX — NEW `offers/adapters/query-normalize.ts`
+  `normalizeProviderQuery(raw, 'electronics'|'food')`:** (1) `foldText` (diacritics/alef/ya/ta-marbuta);
+  (2) GAZETTEER — AR/transliteration phrase→EN canonical, LONGEST-PHRASE wins (`gazetteerLookup`), a domain
+  vocabulary NOT a per-query patch (one row covers a class); (3) FUZZY typo — `editDistance` (Damerau-
+  Levenshtein, handles transposition), length-scaled bound (≤4ch→1 edit, else 2), snaps an unmapped LATIN
+  token to the sector vocab. **NEVER corrects:** Arabic, <4ch, or a `NO_CORRECT` connector (chilled≠grilled,
+  with≠fish — these are 1 edit from a catalog word; correcting changes meaning). Unmapped term → UNCHANGED
+  (off-catalog still honest-empties, never fabricates). WIRED: electronics `queryText` (resolver) runs it
+  BEFORE `canonicalizeElectronicsPhrase`; food `resolve()` runs it on `intent.model` before discovery+filter.
+- **GAZETTEER provider-canonical gotcha (DURABLE):** Eureka indexes "lg fridge"→0 but "lg refrigerator"→2,
+  so AR ثلاجة→**refrigerator** (NOT fridge); the relevance synonym group still treats fridge≡refrigerator.
+  Use the term the PROVIDER indexes best as the canonical, esp. WITH a brand.
+- **C4 test-vendor `Tes P Hut` (live Talabat seed) leaked:** `isTestRestaurant` regex only matched whole-word
+  `test` — "tes" (3-letter obfuscated marker) slipped. FIX: added `tes/tst/uat/qat/fake/internal/staging…` to
+  TEST_MARKERS + boundary `(^|[\s\-_])(marker)([\s\-_]|$)` so "tes" as its OWN token flags but "Contest"/
+  "Tested" do NOT. Double-covered: food-resolver filters slug at discovery + filterDishesByQuery STEP-0 drops
+  by title suffix. VERIFIED: 0 test-vendor cards across cake/kfc/burger.
+- **C4 beverage front-rank:** NEW `isBeverage` (`food-relevance.ts`) — EN word-boundary (`7up/mirinda/cola/
+  water/juice/soda…`) + AR WHOLE-TOKEN (`كولا/بيبسي…`). **CRITICAL:** AR must be whole-token — "شوكولاته"
+  (chocolate) CONTAINS substring "كولا" → would falsely drop chocolate cake as cola. NEW `nonDishRank` (real
+  dish 0 < beverage 1 < condiment 2) replaces condimentRank in both the restaurant-menu pass-through and the
+  dish-query sort → drinks/sauces never front a dish/menu. A query matching ONLY drinks/sauces = no real hit.
+- **C5 gibberish/off-menu dump:** `filterDishesByQuery` got opts `{unmatchedEmpty?}`. **Talabat lane
+  (food-resolver) AND social lane (social-resolver) BOTH pass `unmatchedEmpty:true`** → an unrecognized/
+  gibberish query (xyzqwfood/ramen) returns HONEST-EMPTY, never the first-N restaurant cards NOR the curated
+  IG posts (was leaking Mounjaro/Halo-Halo/cake into every food query). Recognized free-form (meal-prep/diet)
+  still matches — added a `mealprep/diet/keto/healthy/وجبات/دايت…` SYNONYM_GROUP so it's a real hit. Default
+  (no flag) keeps the old lenient cap for any other caller.
+- **C3 rice-pudding leak:** NEW `isDessertRice` (rice pudding/kheer/مهلبيه) + `isSavoryRiceQuery` (rice-family
+  token, no dessert intent). A savory-rice query pre-filters dessert-rice out. ALSO fixed `scoreDish`: SHORT
+  tokens (≤3ch e.g. "ice") match ONLY whole-word — "ice" was substring-matching "r**ice**" so an ice-cream
+  query surfaced rice dishes (F067). Longer tokens may substring-match.
+- **REAL VERIFIED (isolated :3400, LIVE_FETCH=on real Eureka/Blink/X-cite + Talabat/Apify, CLAUDE=mock,
+  SEQUENTIAL warm; owner :3000/:3300/:8765 untouched, NO git):** ELEC — غسالة صحون→7 dishwashers, غسالة
+  ملابس→6 washers, تلفزيون→7 TVs, ميكروويف→8, مكنسة→8 vacuums, آيفون 17 برو→4 iPhones, تابلت→9, ثلاجة ال جي→1
+  LG refrigerator (was 0), labtop dell→3 Dells, refrigirator→11, telvison samsung→8 Samsung TVs. FOOD —
+  تشيز كيك→5, دجاج مقلي→17, biryni→13 rice, shwarma→2 shawarma, كنافة→1 kunafa, rice/kabsa→15 (ricePudding=0),
+  cake→27 desserts (0 beverages top4, 0 test-vendor). HONEST-EMPTY (correct): xyzqwfood/ramen/ice cream/
+  mcdonalds → genuine_no_match. Still genuine-empty (real provider gap, EN, was empty pre-fix too): E014 AC
+  "split unit", E034 vacuum "Dyson" (Dyson sells no std vacuum in feed). Added STOP_WORDS `unit/cheapest/
+  latest/brand/model/ارخص` so "split UNIT" doesn't over-constrain.
+- **Tests +37 (248→285):** NEW `query-normalize.spec.ts` (editDistance; elec+food AR routing each.each;
+  typo correction; no-over-correct/off-catalog-unchanged; C4 test-vendor+beverage; C5 gibberish→empty +
+  IG-lane lenient default; C3 savory-rice drops pudding). RUN: `cd apps/api && npx jest --runInBand`.
+- **Item 4 RATIFIED:** `SearchResponse.coverageReason?: 'ok'|'genuine_no_match'|'provider_failure'|'timeout'`
+  (shared/domain.ts:172) EXACTLY matches `CoverageReason` (offers.service.ts:26). Build green. KEEP IT.
+- **EXPECTED PASS-RATE:** report was 220/300 (73%). C1(36)+C2(22 mostly) AR/typo/appliance now return cards;
+  C3(11) rice-pudding gone; C4(9) test-vendor/beverage fixed; C5(1) gibberish honest-empty. A few EN
+  provider-gap empties remain genuine (E014/E034 ≈ honest). Projected ~92-95%+. QA must RE-RUN the 300 suite.
+- **VERIFY DRIVER:** `/tmp/bo-verify-clusters.mjs` (sequential warm, skips clarifiers). RUN CMD: `cd apps/api
+  && DOTENV_CONFIG_PATH=<repo>/.env CLAUDE_PROVIDER=mock LIVE_FETCH=on SOCIAL_PROVIDER=apify SOCIAL_EXTRACTOR=
+  anthropic APIFY_RESULTS_LIMIT=8 SQLITE_PATH=/tmp/x.sqlite PORT=3400 node -r dotenv/config dist/main.js`.
+
+## ADR-007 full-flow RESULT-relevance fixes (2026-06-27, 248/248 api, REAL-proven, NO git)
+- **D1 electronics timeout/0-cards (HIGH) FIXED — `electronics-resolver.ts` TIER_TIMEOUT_MS bumped**
+  http 1500→**3500ms**, render 5000→**7000ms** (Eureka Algolia is the appliance source + does discover→
+  fetch→extract sequential round-trips; 5s was too tight → whole lane aborted to []). Added
+  `PER_PROVIDER_DEADLINE_MS=9000` via `withDeadline()` (Promise.race, unref'd timer) so a HUNG provider
+  can't stall the lane. Providers run in PARALLEL (allSettled) → slow one only delays itself, others serve
+  PARTIAL. **REAL VERIFIED (LIVE_FETCH=on, real Blink+Eureka+X-cite, isolated):** dishwasher 7, fridge 9,
+  TV 11, microwave 8, AC 6, washing machine 6, vacuum 12 — ALL real cards, failed=0, 217–777ms. Partial
+  proven: Eureka forced down → "TV" still 5 Blink cards, failed=1.
+- **D2 over-dump (HIGH) FIXED — `food-relevance.ts`:** (1) added a **sushi SYNONYM_GROUP** (sushi/sashimi/
+  maki/nigiri/roll + AR سوشي…) + AR coffee aliases. ROOT CAUSE of "sushi"→243: sushi wasn't a recognized
+  dish token, so a "sushi"-named slug flipped `food-resolver.queryMatchedRestaurant` to RESTAURANT-mode →
+  dumped every sushi restaurant's WHOLE menu. Now sushi is a dish term → never flips (GENERALIZING fix).
+  (2) NEW `MATCHED_RESULT_CAP=40` — `filterDishesByQuery` slices the matched+ranked list to top-40 by
+  relevance (scorer already ranks best first), so even a popular term can't dump the long tail. **REAL
+  VERIFIED:** sushi 243→40 (0 off-topic burgers), pizza 130→40, coffee 100→40, all relevant; small set
+  (5) returned in full (cap only bites the tail).
+- **D3 RE "always ~7 cards" — INVESTIGATED: it's DATA-THINNESS, not a bug.** Mock RE seed = 10 posts
+  (8 rent + 2 sale). **REAL VERIFIED (mock provider, fresh resolver per query so 6h cache doesn't bleed):**
+  results VARY correctly — generic rent(no area)→8 rent (sale excluded), Jabriya→1, Salmiya→1, Salwa→3,
+  Hawally→1, BUY→2 sale (rent excluded). Honest + varies by area/tenure/matched-accounts, NOT a fixed 7.
+  Unlisted area (Mishref)→8 = the KNOWN AREA_GROUPS gap (12 hand-areas, gazetteer is ADR-007 Q3, deferred).
+  No code change needed; symptom was thin seed data.
+- **D4 coverage_reason (GR4/ADR-007 Q5) — `OffersService.resolveOffersWithCoverage()` NEW.** Returns
+  `{offers, coverageReason:'ok'|'genuine_no_match'|'provider_failure', providersTried, providersFailed}`.
+  Distinguishes a SUSPECT empty (a lane threw/timed-out → flagged) from a clean empty (every provider
+  answered, nothing matched). `resolveOffers()` now delegates to it (callers unchanged). Electronics
+  resolver got `resolveWithCoverage()`: `resolveOneProvider` returns `{hits,failed}` — a relevance-empty
+  is markOk (NOT a failure), only a throw is `failed:true`. `search.service.runSearch` calls it (with a
+  `typeof …WithCoverage==='function'` guard so test doubles stubbing only `resolveOffers` still work →
+  treated as genuine_no_match) + surfaces `coverageReason` in the empty `SearchResponse` + `empty_empty`
+  event payload (coverage_reason + providers_tried/failed). `SearchResponse.coverageReason` was already in
+  shared/domain.ts. **REAL VERIFIED:** HTTP /search (mock, :3309) genuine empty → response
+  `coverageReason:"genuine_no_match"`; compiled svc → ok(9 cards)/genuine_no_match/provider_failure(failed=1).
+- **Tests +10 (238→248):** electronics-resolver.spec +3 (providersFailed on throw / clean-empty=0 /
+  hung-provider deadline still partial), food-relevance.spec +4 (sushi recognized+matchedGroup, 200-item
+  cap to 40 no off-topic, pizza/coffee capped, small set full), offers.service.spec +3 (coverageReason
+  ok / genuine_no_match / provider_failure via thrown lane). RUN: `cd apps/api && npx jest --runInBand`.
+- **VERIFY DRIVERS (isolated, owner :3000/:8765 untouched):** `/tmp/verify-elec.js` (LIVE_FETCH=on real
+  providers, 7 catalog terms), `/tmp/verify-partial.js` (forced provider-down), `/tmp/verify-overdump.js`
+  (243-item menu→cap), `/tmp/verify-re.js` (mock RE varied queries), `/tmp/verify-cov-svc.js` +
+  `/tmp/drive-coverage.sh` (HTTP :3309 coverageReason). Compile first: `npx tsc -p tsconfig.json` (ignore
+  the known pre-existing import-tracked-accounts.spec rootDir tsc warning — jest handles it fine).
+
 ## tracked_accounts DB store — IG handles now DB-driven (2026-06-27, 238/238 api, REAL-proven)
 - **GOAL:** persist the IG curated allow-list in the DB by sector/category (keep GROWING it); IG ingestion
   reads from it instead of the hardcoded `HANDLES_FOOD`/`REALESTATE_HANDLES` dicts.

@@ -311,21 +311,34 @@ export class SearchService {
     this.pinIntentToSector(session);
 
     const startedAt = Date.now();
-    const resolved = await this.offers.resolveOffers(session.intentNormalized);
+    // Prefer the coverage-aware resolve (ADR-007 Q5). Some test doubles stub only `resolveOffers`; in
+    // that case fall back to it and treat an empty as a genuine no-match (no provider-failure signal).
+    const resolution =
+      typeof (this.offers as any).resolveOffersWithCoverage === 'function'
+        ? await this.offers.resolveOffersWithCoverage(session.intentNormalized)
+        : {
+            offers: await this.offers.resolveOffers(session.intentNormalized),
+            coverageReason: 'genuine_no_match' as const,
+            providersTried: 0,
+            providersFailed: 0,
+          };
+    const resolved = resolution.offers;
 
     // ── F-SR1: NEVER dead-end. Compute the no-match fallback from the REAL resolved offer set. ──
-    // resolved.length === 0 means the resolved MODEL has no SKU/offers at all (matchSkus empty) — the
-    // genuine empty-empty case (NOT a provider failure: the live layer degrades to partial results, it
-    // doesn't return []). Show a HELPFUL empty state with actionable broaden controls, never a bare 0.
+    // resolved.length === 0 → no offers. ADR-007 Q5/GR4: the coverage_reason tells us WHY — a
+    // `provider_failure`/`timeout` empty is SUSPECT (a provider threw/timed out, the empty is not
+    // trustworthy) and must be FLAGGED, vs a `genuine_no_match` (every provider answered, nothing
+    // matched). We never silently show a provider-failure empty as a clean empty.
     if (resolved.length === 0) {
       session.status = 'empty';
       this.sessions.save(session);
       const broaden = broadenSuggestions(session.intentNormalized);
+      const coverageReason = resolution.coverageReason; // 'genuine_no_match' | 'provider_failure' | 'timeout'
       this.events.log({
         type: 'empty_result',
         pseudoId: session.pseudoId,
         searchSessionId: session.id,
-        payload: { category: session.intentNormalized.category ?? 'unknown' },
+        payload: { category: session.intentNormalized.category ?? 'unknown', coverage_reason: coverageReason },
       });
       // F-SR1 AC-20: anonymized empty_empty event (pseudo_id only; no PII, no raw query text).
       this.events.log({
@@ -334,6 +347,9 @@ export class SearchService {
         searchSessionId: session.id,
         payload: {
           category: session.intentNormalized.category ?? 'unknown',
+          coverage_reason: coverageReason, // ADR-007 Q5: provider_failure vs genuine_no_match
+          providers_tried: resolution.providersTried,
+          providers_failed: resolution.providersFailed,
           broaden_count: broaden.length,
           broaden_dimensions: broaden.map((b) => b.dimension),
         },
@@ -342,6 +358,7 @@ export class SearchService {
         searchSessionId: session.id,
         state: 'empty',
         cards: [],
+        coverageReason, // ADR-007 Q5: surfaced in the response so a provider-failure empty is visible, not silent
         clarifierCount: session.clarifierCount,
         totalQuestions: Math.max(MIN_CLARIFIER_QUESTIONS, this.preResolvedDimensions(session).length),
         assumptions: this.assumptionsFrom(session),

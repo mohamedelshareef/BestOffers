@@ -164,6 +164,12 @@ export interface SearchResponse {
    * user is never shown a bare "0 results".
    */
   broadenSuggestions?: BroadenSuggestion[];
+  /**
+   * ADR-007 Q5: on state='empty', distinguishes a genuine no-match from a provider failure so a
+   * suspect (provider-failure) empty is visible to clients/QA, not silently reported as a clean
+   * empty. Absent on results. ('ok' | 'genuine_no_match' | 'provider_failure')
+   */
+  coverageReason?: 'ok' | 'genuine_no_match' | 'provider_failure' | 'timeout';
 }
 
 export interface IntentRequest {

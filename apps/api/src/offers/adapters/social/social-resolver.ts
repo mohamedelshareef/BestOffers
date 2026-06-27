@@ -47,6 +47,10 @@ export class SocialOfferResolver {
         out.map((o) => ({ ...o, title: o.sku.canonicalName, category: o.sku.attributes.category })),
         queryText,
         false,
+        // C4/C5: a gibberish/off-menu food query must NOT leak the curated IG posts (Mounjaro/cake) — an
+        // unmatched query returns honest-empty, same as the Talabat lane. Recognized free-form terms
+        // (meal-prep/diet) still match because they're in the synonym groups.
+        { unmatchedEmpty: true },
       );
       out = ranked.map(({ title: _t, category: _c, ...rest }) => rest as ResolvedOffer);
     }

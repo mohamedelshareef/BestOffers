@@ -13,13 +13,28 @@ import {
   groupSimilarProducts,
   scoreProductTitle,
 } from './electronics-relevance';
+import { normalizeProviderQuery } from './query-normalize';
 
-/** Per-tier hard timeout (ADR-003 §4): Tier-1 http ≈ 1.5s, Tier-2 render ≈ 5s, both ≤ 6s budget. */
+/**
+ * Per-tier hard timeout (ADR-003 §4).
+ *
+ * OWNER BUG 2026-06-27 (HIGH — catalog terms → 0 cards/timeout): the old http=1500ms / render=5000ms was
+ * too tight for live discovery. Each provider does a discover() THEN a fetch()+extract() per product
+ * (sequential round-trips), and Eureka's Algolia index under load regularly exceeds 5s — so a real
+ * provider would abort mid-chain and the whole lane returned []. Bumped to a robust band that still
+ * stays within the overall query budget because providers run in PARALLEL (allSettled): the slow
+ * provider only delays itself, the others return on time and we serve PARTIAL results.
+ *   http   (Blink suggest.json / X-cite)  : 3500ms  (suggest.json + a PDP fetch, ×1 retry inside httpGet)
+ *   render (Eureka Algolia)               : 7000ms  (Algolia query can spike; this is the appliance source)
+ */
 const TIER_TIMEOUT_MS: Record<string, number> = {
-  http: 1500,
-  render: 5000,
+  http: 3500,
+  render: 7000,
   render_residential: 8000,
 };
+
+/** Overall cap for a single provider's full discover→fetch chain, so one provider never blocks the lane. */
+const PER_PROVIDER_DEADLINE_MS = 9000;
 
 /** How many discovered products to keep per provider (over-fetch a little, then relevance-trim). */
 const PER_PROVIDER_LIMIT = 8;
@@ -49,27 +64,54 @@ export class ElectronicsOfferResolver {
   ) {}
 
   async resolve(intent: IntentNormalized): Promise<ResolvedOffer[]> {
-    const queryText = this.queryText(intent);
-    if (!queryText) return [];
+    return (await this.resolveWithCoverage(intent)).offers;
+  }
 
+  /**
+   * Resolve electronics offers AND report coverage (ADR-007 Q5 / GR4): when the result is empty we must
+   * distinguish a PROVIDER FAILURE/TIMEOUT (some provider threw or timed out → the empty is suspect and
+   * must be flagged) from a GENUINE no-match (every provider answered cleanly, none stocks the term).
+   */
+  async resolveWithCoverage(intent: IntentNormalized): Promise<ElectronicsResolveResult> {
+    const queryText = this.queryText(intent);
+    if (!queryText) return { offers: [], providersTried: 0, providersFailed: 0 };
+
+    const providers = this.adapters.filter((a) => a.enabled && a.sector === 'electronics');
     const settled = await Promise.allSettled(
-      this.adapters
-        .filter((a) => a.enabled && a.sector === 'electronics')
-        .map((a) => this.resolveOneProvider(a, queryText)),
+      providers.map((a) => this.withDeadline(this.resolveOneProvider(a, queryText), PER_PROVIDER_DEADLINE_MS)),
     );
 
     // Collect every provider's synthesized (title-carrying) hits, then group same-product across them.
+    // A provider counts as FAILED if it rejected (timeout/threw at the deadline level) OR its own
+    // chain caught an error (failed=true). A clean empty (provider answered, nothing relevant) is NOT
+    // a failure — that is a genuine no-match (ADR-007 Q5 coverage distinction).
     const hits: ProviderHit[] = [];
+    let providersFailed = 0;
     for (const r of settled) {
-      if (r.status === 'fulfilled') hits.push(...r.value);
-      // rejected provider → omit (partial results); the query still returns the others (ADR-003 §4/§5).
+      if (r.status === 'fulfilled') {
+        hits.push(...r.value.hits);
+        if (r.value.failed) providersFailed++;
+      } else {
+        providersFailed++; // rejected/timed-out provider → partial results (ADR-003 §4/§5); flagged.
+      }
     }
-    if (hits.length === 0) return [];
 
-    return this.groupAndSynthesize(hits, queryText);
+    const offers = hits.length === 0 ? [] : this.groupAndSynthesize(hits, queryText);
+    return { offers, providersTried: providers.length, providersFailed };
   }
 
-  private async resolveOneProvider(adapter: ProviderAdapter, queryText: string): Promise<ProviderHit[]> {
+  /** Race a provider's full chain against an overall deadline so one hung provider can't stall the lane. */
+  private withDeadline<T>(p: Promise<T>, ms: number): Promise<T> {
+    return Promise.race([
+      p,
+      new Promise<T>((_resolve, reject) => {
+        const t = setTimeout(() => reject(new Error('provider deadline exceeded')), ms);
+        if (typeof t.unref === 'function') t.unref();
+      }),
+    ]);
+  }
+
+  private async resolveOneProvider(adapter: ProviderAdapter, queryText: string): Promise<ProviderResult> {
     const ctx = {
       ...DEFAULT_HTTP_CTX,
       timeoutMs: TIER_TIMEOUT_MS[adapter.tier] ?? DEFAULT_HTTP_CTX.timeoutMs,
@@ -77,14 +119,14 @@ export class ElectronicsOfferResolver {
     const cacheKey = `elec:${adapter.providerId}:${queryText}`;
 
     const cached = await this.cache.get(cacheKey);
-    if (cached) return this.toHits(adapter, cached, 'cache', queryText);
+    if (cached) return { hits: this.toHits(adapter, cached, 'cache', queryText), failed: false };
 
     try {
       // Pass the raw query text + a hint skuId for the X-cite known-URL path. Over-fetch then trim.
       const refs = await adapter.discover({ text: queryText, limit: PER_PROVIDER_LIMIT }, ctx);
       if (refs.length === 0) {
-        adapter.health(); // healthy, just empty
-        return [];
+        adapter.health(); // healthy, just empty → NOT a failure (genuine no-match signal).
+        return { hits: [], failed: false };
       }
 
       const perRef = await Promise.allSettled(refs.map((ref) => this.fetchExtract(adapter, ref, ctx)));
@@ -99,16 +141,17 @@ export class ElectronicsOfferResolver {
         queryText,
       );
       if (relevant.length === 0) {
-        (adapter as any).markFail?.();
-        return [];
+        // The provider answered but nothing was relevant → a genuine miss, NOT a provider failure.
+        (adapter as any).markOk?.();
+        return { hits: [], failed: false };
       }
 
       (adapter as any).markOk?.();
       await this.cache.set(cacheKey, relevant, ELECTRONICS_TTL_MS);
-      return this.toHits(adapter, relevant, 'live', queryText);
+      return { hits: this.toHits(adapter, relevant, 'live', queryText), failed: false };
     } catch {
       (adapter as any).markFail?.();
-      return []; // graceful partial result
+      return { hits: [], failed: true }; // graceful partial result, but FLAGGED as a provider failure.
     }
   }
 
@@ -208,7 +251,10 @@ export class ElectronicsOfferResolver {
   private queryText(intent: IntentNormalized): string {
     const parts = [intent.brand, intent.model].filter(Boolean).join(' ').trim();
     const raw = parts || (intent.model ?? intent.brand ?? '').trim();
-    return canonicalizeElectronicsPhrase(raw);
+    // C1 fix: AR→EN + typo normalization so the provider search receives an indexable EN term
+    // (غسالة صحون→dishwasher, ايفون→iphone, refrigirator→refrigerator) BEFORE phrase-canonicalization.
+    const normalized = normalizeProviderQuery(raw, 'electronics');
+    return canonicalizeElectronicsPhrase(normalized);
   }
 }
 
@@ -217,4 +263,19 @@ interface ProviderHit {
   n: NormalizedOffer;
   source: 'live' | 'cache';
   score: number;
+}
+
+/** Per-provider outcome: the synthesized hits + whether the provider FAILED (threw) vs cleanly empty. */
+interface ProviderResult {
+  hits: ProviderHit[];
+  failed: boolean;
+}
+
+/** Result of electronics discovery + coverage telemetry (ADR-007 Q5). */
+export interface ElectronicsResolveResult {
+  offers: ResolvedOffer[];
+  /** How many electronics providers were enabled/tried this run. */
+  providersTried: number;
+  /** How many of those threw or exceeded their deadline (a suspect empty when offers is []). */
+  providersFailed: number;
 }
