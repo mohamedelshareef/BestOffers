@@ -2,6 +2,79 @@
 
 > READ at task start. UPDATE at end with durable facts only. Keep lean; prune stale.
 
+## RELAX-AND-RETRY discovery — over-specific multi-word electronics no longer 0 (2026-06-27, 313/313 api, REAL-proven, NO git)
+- **BUG (300-case cluster):** over-specific multi-word electronics queries returned EMPTY because extra
+  model-suffix/size/form-factor/price tokens OVER-CONSTRAINED the provider DISCOVERY search even though the
+  product exists. 10 verified failing→working pairs (AC split unit→0/split AC→6; "vacuum cleaner Dyson"→0/
+  "vacuum cleaner"→8; "Google Pixel 9"→0; "AirPods Pro 2"→0; "Apple Watch Series 10"→0; "LG OLED 65 TV"→0;
+  "Samsung side by side fridge"→0; "front load washing machine LG"→0; "Xiaomi phone"→0; "headphones under 50
+  KWD"→0).
+- **FIX 1 — `query-normalize.ts` NEW `relaxQueryVariants(normalized)`:** builds a ladder of progressively-
+  relaxed discovery terms, MOST-SPECIFIC first. Rung0=full; Rung1=strip price-constraint phrase
+  (PRICE_CONSTRAINT_RE) + multi-word form-factor phrases (FORM_FACTOR_PHRASES: side-by-side/front-load/
+  built-in…); Rung2=drop ALL over-specific tokens WHEREVER they sit (bare numbers NUMERIC_SUFFIX_RE, model-
+  tier words MODEL_TIER_WORDS series/pro/max…, single-token form-factors FORM_FACTOR_WORDS split/inverter) —
+  this is why interior "65" in "lg oled 65 tv" drops (trailing-only peeling FAILED that case); Rung3=drop a
+  trailing BRAND after a type ("vacuum cleaner DYSON"→"vacuum cleaner") OR a generic type suffix after a brand
+  (GENERIC_TYPE_WORDS "xiaomi phone"→"xiaomi"); Rung4=single strongest core token (brand else type). Dedup,
+  never empty. GENERALIZING (token CLASSES, not a per-query table). NOTE typo-corrector quirk: "phone"→"iphone"
+  (1-edit snap) so "Xiaomi phone"→"xiaomi iphone" rung0 (0 hits) then "xiaomi" rung1 recovers — left as-is.
+- **FIX 2 — `electronics-resolver.ts resolveOneProvider` loops the ladder:** for each rung
+  discover→fetch→FILTER, stop at the FIRST rung whose RELEVANT (filtered) set is non-empty. CRITICAL: re-check
+  relevance PER RUNG — an over-specific rung can DISCOVER (core substring hits) yet be over-constrained at the
+  FILTER step by its own extra AND-token ("vacuum cleaner dyson" finds vacuums then "dyson" drops the non-Dyson
+  ones → empty again). Stopping on filtered-non-empty + using THAT rung's term as the relevance FLOOR fixes
+  both. `resolveWithCoverage` builds the ladder once and passes it in. Cache key stays the FULL queryText.
+- **FIX 3 — `electronics-relevance.ts filterProductsByQuery(items, query, rankQuery?)`:** `query`=the matched
+  rung = the AND-filter FLOOR (hits must satisfy its tokens); `rankQuery`=full specific query = RANK-ONLY (a
+  closer specific match floats first, NEVER drops the rest). NEW `refinementBonus()` rewards the specific
+  query's discriminator tokens NOT in the floor — INCLUDING 1-char model numbers (the "9" in Pixel 9, matched
+  WHOLE-token so Pixel 9 ranks above Pixel 8) which `electronicsTokens` (len≥2) would otherwise ignore.
+- **REAL SPOT-CHECK (LIVE_FETCH=on real Xcite/Blink/Eureka, compiled resolver, isolated, NO git):** "Google
+  Pixel 9"→8 (Pixel 8 Pro/7a/10 Fold, real KWD), "vacuum cleaner Dyson"→8 (AutoBot/Samsung Jet vacuums),
+  "headphones under 50 KWD"→3 (Bose/JBL — price phrase stripped from discovery), "LG OLED 65 TV"→2 (real LG
+  OLED). ALL were 0 before. Real verbatim prices, correct category, no fabrication.
+- **Tests +27 (286→313):** query-normalize.spec ladder block (full-term-first, 10 pairs each→core, price-strip,
+  interior-number drop, single-term=itself, never-empty); electronics-resolver.spec relax block (12: each of 10
+  pairs 0-on-full→cards-on-core via SearchAwareAdapter query-aware mock, Pixel-9-ranks-first-keeps-both,
+  genuinely-absent honest-empties). RUN: `cd apps/api && npx jest --runInBand`.
+- **DURABLE:** discovery must RELAX (find the product) while relevance FILTERS on the matched rung + RANKS on
+  the full query (precision). NEVER let a specific token zero out BOTH discovery AND the filter. Genuinely-
+  absent products still honest-empty (no rung discovers → []). Q4 embeddings remain the eventual generalization.
+
+## CLAUDE-OUTAGE RESILIENCE — clarify() no longer 500s search (2026-06-27, 286/286 api, REAL-proven, NO git)
+- **BUG (QA, real):** `startIntent` ran `claude.clarify()` inside `Promise.all` with NO fallback (only the
+  parallel `generateClarifierSet` had one). Claude down (credit depleted→400, invalid key→401, any outage)
+  → `clarify()` rejects → whole `/search/intent` throws 500 → search HARD-DOWN. A provider outage must
+  DEGRADE, not 500.
+- **FIX (`search.service.ts`):** NEW `clarifyWithFallback(input)` wraps `claude.clarify()`; on throw it
+  logs a WARN (`clarify() failed … → search degrades, not 500`) and returns a deterministic minimal
+  `ClarifierResult` = `{ intentNormalized:{ model:intentRaw.trim(), constraints:{} }, needClarification:true }`.
+  That minimal intent is ENOUGH downstream: `pinIntentToSector` pins category=sector + model=raw for food/RE
+  (seeds model for off-catalog electronics), and the CONFIG clarifier gate (`clarifier-sets.ts`) pre-resolves
+  the food/RE dish/area dim off raw text — providers need NO Claude. `startIntent` now calls
+  `clarifyWithFallback` (was `this.claude.clarify`). Imported `ClarifierInput`/`ClarifierResult`.
+- **explainRanking ALREADY degrades (verified intact):** `assembleCards` try/catch → `explanations=[]` →
+  every card falls to the truthful data-only why (`<price> at <provider>`). Confirmed REAL below.
+- **REAL VERIFIED (isolated :3411, CLAUDE_PROVIDER=anthropic + ANTHROPIC_API_KEY=invalid = real 401
+  x-api-key on EVERY Claude call = the outage class; LIVE_FETCH=off, mock social, owner ports untouched,
+  NO git):** food "kfc" → `/search/intent` **HTTP 201 (not 500)**, state=clarifying, config set drives gate
+  (totalQuestions=5); skip-through → terminal empty w/ coverageReason=genuine_no_match + broadenSuggestions
+  (food has no offline data, providers ran clean). ELECTRONICS "iPhone 17 Pro Max" (MOCK_SKUS offline) →
+  201, config gate (storage→color→budget→condition), skip-through → **9 REAL cards** (Eureka/X-cite, real
+  KWD prices), why="419.500 KWD at Eureka" = data-only (explainRanking outage degraded too). Log: 2×
+  `clarify() failed (401 invalid x-api-key) → search degrades, not 500`; **0 Internal Server Errors** in the
+  whole run.
+- **TESTS +1 (285→286):** `search-resilience.spec.ts` NEW "OUTAGE: clarify() throwing does NOT 500 — config
+  clarifiers drive the gate and search still reaches REAL provider results" (clarify+clarifierSet+
+  explainRanking all throw → intent returns clarifying 200, ≥5 config Qs, skip→results w/ real card +
+  data-only why). RUN: `cd apps/api && npx jest --runInBand`. NOTE: `accounts.e2e.spec.ts` is FLAKY in the
+  full --runInBand run (OTP/auth 401, timing/rate-limit, unrelated to this change — passes in isolation +
+  on reruns); confirmed 286/286 on 3 consecutive full runs.
+- **DURABLE:** ANY per-request Claude call in the intent/search path MUST have a deterministic fallback —
+  never let a Claude failure 500 the search. clarify→config intent, clarifierSet→config set, explainRanking→
+  data-only why. The providers + config clarifiers are the resilient spine; Claude is best-effort enrichment.
+
 ## ADR-007 300-case CLUSTER FIXES C1/C2/C3/C4/C5 (2026-06-27, 285/285 api, REAL-proven, NO git)
 - **ROOT CAUSE (C1+C2, 58/80 fails, ONE shared):** provider search (Eureka/Blink elec, Talabat food) indexes
   EN-canonical terms; AR queries (غسالة صحون/تشيز كيك) + typos (refrigirator/biryni) + appliance vocab were

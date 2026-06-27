@@ -199,6 +199,136 @@ function gazetteerLookup(folded: string, gz: Record<string, string>): string | n
 export type NormalizeSector = 'electronics' | 'food';
 
 /**
+ * RELAX-AND-RETRY discovery (ADR-007 cluster: over-specific multi-word electronics → 0).
+ *
+ * THE PROBLEM (300-case run, one coherent cluster): an over-specific query carries extra
+ * model-suffix / size / form-factor / price-constraint tokens that OVER-CONSTRAIN the provider's
+ * DISCOVERY search, so it returns 0 refs even though the product exists. Verified pairs:
+ *   "air conditioner split unit"→0  but "split air conditioner"→6
+ *   "vacuum cleaner Dyson"→0        but "vacuum cleaner"→8
+ *   "Google Pixel 9"→0             but "Google Pixel"→5
+ *   "AirPods Pro 2"→0              but "AirPods"→1
+ *   "Apple Watch Series 10"→0      but "Apple Watch"→4
+ *   "LG OLED 65 TV"→0             but "OLED TV"→8
+ *   "Samsung side by side fridge"→0 but "Samsung refrigerator"→3
+ *   "front load washing machine LG"→0 but "washing machine"→6
+ *   "Xiaomi phone"→0             but "Xiaomi"→10
+ *   "headphones under 50 KWD"→0    but "headphones"→3
+ *
+ * THE FIX (GENERALIZING, not a per-query table): build the DISCOVERY term as a ladder of
+ * progressively-relaxed core queries — the full term first, then drop the most-specific trailing
+ * modifier, repeat. The resolver searches each rung in order and stops at the first that returns hits.
+ * Relevance filtering still runs on the RESULTS with the ORIGINAL specific query, so the dropped
+ * tokens still rank/filter — they just can't zero out discovery. Genuinely-absent products (every rung
+ * empty) still honest-empty; nothing is fabricated.
+ *
+ * What counts as an over-specific "trailing modifier" (a CLASS, not a hand list):
+ *   - a price-constraint phrase ("under 50 kwd", "below 30 dinar") — belongs to RANKING, not discovery;
+ *   - a pure model-number / size suffix ("9", "65", "series 10", "pro 2");
+ *   - a form-factor modifier ("split unit", "side by side", "front load", "top load");
+ *   - a generic category suffix AFTER a brand ("xiaomi PHONE", "lg FRIDGE") — the brand alone discovers;
+ *   - a trailing brand AFTER the product type ("vacuum cleaner DYSON", "washing machine LG").
+ * Each relaxation step removes ONE such trailing element; we never strip below a single meaningful core.
+ */
+
+/** Phrases that constrain PRICE/BUDGET — never belong in a discovery query (ranking handles them). */
+const PRICE_CONSTRAINT_RE =
+  /\b(under|below|over|above|less\s+than|cheaper\s+than|up\s+to|max|maximum|min|minimum)\s+\d+\s*(kwd|kd|dinar|dinars|fils)?\b|\b\d+\s*(kwd|kd|dinar|dinars|fils)\b/gi;
+
+/** Pure model-number / size suffix tokens (a bare number, optionally with a unit like inch/"). */
+const NUMERIC_SUFFIX_RE = /^\d+(\.\d+)?$/;
+
+/** Sub-brand / tier words that, with a trailing number, form a model suffix ("series 10", "pro 2"). */
+const MODEL_TIER_WORDS = new Set(['series', 'gen', 'generation', 'pro', 'max', 'plus', 'ultra', 'mini', 'air', 'se', 'lite']);
+
+/** Multi-word form-factor modifiers (over-constrain discovery; relevance still ranks them on results). */
+const FORM_FACTOR_PHRASES = [
+  'side by side', 'french door', 'front load', 'top load', 'split unit', 'window unit',
+  'built in', 'free standing', 'freestanding', 'over the range', 'counter depth',
+];
+
+/** Single-token form-factor / spec modifiers safe to drop from discovery when they over-constrain. */
+const FORM_FACTOR_WORDS = new Set(['split', 'inverter', 'portable', 'wireless', 'wired', 'foldable', 'curved', 'cordless']);
+
+/** Generic product-type words; when they TRAIL a brand they over-constrain ("xiaomi phone" → "xiaomi"). */
+const GENERIC_TYPE_WORDS = new Set([
+  'phone', 'smartphone', 'mobile', 'tablet', 'laptop', 'computer', 'tv', 'television',
+  'fridge', 'refrigerator', 'watch', 'speaker', 'headphones', 'earbuds', 'monitor', 'console',
+]);
+
+/** Known electronics brand tokens — used to detect "type … BRAND" (trailing brand) and "BRAND type". */
+const ELECTRONICS_BRANDS = new Set([
+  'apple', 'samsung', 'lg', 'sony', 'dyson', 'xiaomi', 'huawei', 'google', 'pixel', 'dell', 'hp',
+  'lenovo', 'asus', 'acer', 'msi', 'bosch', 'ariston', 'hitachi', 'panasonic', 'toshiba', 'nintendo',
+  'microsoft', 'oneplus', 'oppo', 'realme', 'nokia', 'motorola', 'bose', 'jbl', 'anker', 'philips',
+]);
+
+/**
+ * Build a relax-and-retry ladder of discovery terms for an electronics query, most-specific FIRST.
+ * Each successive entry drops ONE over-specific trailing element. De-duped, never empty (the last rung
+ * is always at least one meaningful token). The resolver searches each in order, first-with-hits wins.
+ */
+export function relaxQueryVariants(normalized: string): string[] {
+  const ladder: string[] = [];
+  const push = (term: string) => {
+    const cleaned = term.replace(/\s+/g, ' ').trim();
+    if (cleaned && !ladder.includes(cleaned)) ladder.push(cleaned);
+  };
+
+  // RUNG 0: the full normalized term as-is (most specific). Try it first - many specific queries DO
+  // discover fine, and we never want to drop precision when it is not actually needed.
+  push(normalized);
+
+  // RUNG 1: strip price-constraint phrases (ranking, never discovery) + multi-word form-factor phrases
+  // ("side by side", "front load"). Fixes the price/form-factor cases on its own.
+  let base = normalized.replace(PRICE_CONSTRAINT_RE, ' ');
+  for (const ph of FORM_FACTOR_PHRASES) {
+    base = base.replace(new RegExp(`\\b${ph.replace(/\s+/g, '\\s+')}\\b`, 'gi'), ' ');
+  }
+  base = base.replace(/\s+/g, ' ').trim();
+  push(base);
+
+  const tokens = base.split(' ').filter(Boolean);
+  const lower = tokens.map((t) => t.toLowerCase());
+
+  // A token is OVER-SPECIFIC if it is a bare number/size, a model-tier word ("series"/"pro"), or a
+  // single-token form-factor/spec modifier ("split"/"inverter"). Everything else is a CORE token.
+  // These can sit ANYWHERE (e.g. "lg oled 65 tv") so we drop them by class, not just from the tail.
+  const isOverSpecific = (w: string): boolean =>
+    NUMERIC_SUFFIX_RE.test(w) || MODEL_TIER_WORDS.has(w) || FORM_FACTOR_WORDS.has(w);
+
+  // RUNG 2: drop ALL over-specific tokens wherever they sit - "lg oled 65 tv" -> "lg oled tv", "apple
+  // watch series 10" -> "apple watch", "google pixel 9" -> "google pixel". Brand + product family
+  // survive and discover; dropped tokens still RANK (resolver passes the full query as rankQuery).
+  const core = tokens.filter((_, i) => !isOverSpecific(lower[i]));
+  push(core.join(' '));
+
+  // RUNG 3: drop a trailing BRAND after a product type ("vacuum cleaner DYSON", "washing machine LG")
+  // OR a generic type suffix after a brand ("xiaomi PHONE", "lg FRIDGE") - the survivor discovers alone.
+  const coreLower = core.map((t) => t.toLowerCase());
+  if (core.length >= 2) {
+    const last = coreLower[core.length - 1];
+    const prev = coreLower[core.length - 2];
+    if (ELECTRONICS_BRANDS.has(last) && !ELECTRONICS_BRANDS.has(prev)) {
+      push(core.slice(0, -1).join(' ')); // "washing machine lg" -> "washing machine"
+    } else if (GENERIC_TYPE_WORDS.has(last) && ELECTRONICS_BRANDS.has(prev)) {
+      push(core.slice(0, -1).join(' ')); // "xiaomi phone" -> "xiaomi"
+    }
+  }
+
+  // RUNG 4 (last resort): a single strongest core token - a known brand, else a product-type word - so
+  // an over-specific query ("front load washing machine LG") still bottoms out at a discoverable term.
+  if (core.length > 1) {
+    const brand = core.find((t) => ELECTRONICS_BRANDS.has(t.toLowerCase()));
+    const typeWord = core.find((t) => GENERIC_TYPE_WORDS.has(t.toLowerCase()));
+    if (brand) push(brand);
+    else if (typeWord) push(typeWord);
+  }
+
+  return ladder.length ? ladder : [normalized];
+}
+
+/**
  * Normalize a raw user query to the EN-canonical search term the providers index.
  *  1. fold diacritics/letters
  *  2. gazetteer (AR / transliteration phrase → EN canonical), longest-phrase wins

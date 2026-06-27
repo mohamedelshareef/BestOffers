@@ -97,6 +97,36 @@ describe('Search resilience (v2 HIGH defect fixes)', () => {
     expect(res.state).toBe('results'); // skip-all still searches (never a dead end)
   });
 
+  it('OUTAGE: clarify() throwing (Anthropic credit depleted → 400 / any outage) does NOT 500 — config clarifiers drive the gate and search still reaches REAL provider results', async () => {
+    // QA defect (2026-06-27): `clarify()` ran inside Promise.all with no fallback, so a Claude outage
+    // rejected the whole /search/intent → 500 → search hard-down. A provider outage must DEGRADE, not 500.
+    const outageClaude: ClaudeClient = {
+      async clarify() {
+        throw new Error('400 {"type":"error","error":{"type":"invalid_request_error","message":"credit balance is too low"}}');
+      },
+      async clarifierSet() {
+        throw new Error('400 credit balance is too low'); // both per-request Claude calls down in an outage
+      },
+      async explainRanking() {
+        throw new Error('400 credit balance is too low');
+      },
+    };
+    const svc = makeService(outageClaude, [oneFoodOffer()]);
+
+    // intent does NOT throw — it returns the first CONFIG clarifier (200, not 500).
+    let res = await svc.startIntent({ sector: 'food', locale: 'en', intentRaw: 'kfc' }, 'p1');
+    expect(res.state).toBe('clarifying'); // degraded to the deterministic config clarifier flow
+    expect(res.totalQuestions).toBeGreaterThanOrEqual(5); // ≥5 config clarifiers still presented
+    expect(res.questions![0].chips.length).toBeGreaterThan(0);
+
+    // skip through the ≥5 config gate → reaches the providers (which need no Claude) → REAL cards.
+    res = await skipToTerminal(svc, res, 'p1');
+    expect(res.state).toBe('results');
+    expect(res.cards).toHaveLength(1);
+    expect(res.cards![0].priceFils).toBe(2000); // real provider data, untouched by the Claude outage
+    expect(res.cards![0].whyEn).toContain('Talabat'); // explainRanking outage → data-only why, never blank
+  });
+
   it('D-V2-2: a genuinely empty food result carries ≥1 broadenSuggestions — never a bare 0', async () => {
     const svc = makeService(flakyClaude({ clarifyAsks: false, explainThrows: false }), []);
     const res = await skipToTerminal(svc, await svc.startIntent({ sector: 'food', locale: 'en', intentRaw: 'zzznotareal' }, 'p1'), 'p1');

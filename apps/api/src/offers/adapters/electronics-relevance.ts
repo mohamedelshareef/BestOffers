@@ -163,17 +163,61 @@ export interface ProductCandidate {
  * significant query token; ranks stronger (whole-word) matches first. A query with no significant
  * tokens leaves the list as-is (provider order). Never invents — only filters/orders real hits.
  */
-export function filterProductsByQuery<T extends ProductCandidate>(items: T[], query: string): T[] {
+export function filterProductsByQuery<T extends ProductCandidate>(
+  items: T[],
+  query: string,
+  rankQuery?: string,
+): T[] {
+  // RELAX-AND-RETRY relevance: `query` is the term discovery actually MATCHED (the AND-filter floor —
+  // hits must satisfy every token of it). `rankQuery`, when given, is the fuller ORIGINAL specific
+  // query used only to RANK (a hit matching the extra specific tokens floats higher), never to DROP.
+  // So "vacuum cleaner Dyson" relaxed to discover "vacuum cleaner" keeps all real vacuums, with any
+  // Dyson ones ranked first — the specific term refines, it doesn't zero out.
   const tokens = electronicsTokens(query);
   if (tokens.length === 0) return [...items];
-  const wantsAccessory = queryWantsAccessory(query);
+  const wantsAccessory = queryWantsAccessory(query) || (!!rankQuery && queryWantsAccessory(rankQuery));
   return items
-    .map((item) => ({ item, score: scoreProductTitle(item.title, query, item.category ?? '') }))
+    .map((item) => {
+      const floor = scoreProductTitle(item.title, query, item.category ?? '');
+      // additive rank bonus from the specific query's discriminators (model number, brand) over the
+      // AND-floor — never gates, only orders. Computed against the FULLER of the two queries so a
+      // model-number discriminator ("Pixel 9" vs "Pixel 8") floats the exact match even when the matched
+      // discovery rung equals the query text (the "9" is sub-token and not in the AND-floor either way).
+      const refine = refinementBonus(item.title, rankQuery ?? query, query, item.category ?? '');
+      return { item, score: floor, total: floor + refine };
+    })
     .filter((s) => s.score > 0)
     // drop accessories/companions for a DEVICE query (unless the query asked for that accessory).
     .filter((s) => wantsAccessory || !isAccessoryTitle(s.item.title))
-    .sort((a, b) => b.score - a.score)
+    .sort((a, b) => b.total - a.total)
     .map((s) => s.item);
+}
+
+/**
+ * Additive RANK-only bonus: how many of the specific query's EXTRA tokens (those not in the matched
+ * discovery floor) appear in the title/category. Pure ordering signal — it NEVER drops a hit, so a
+ * relaxed discovery still keeps every real product while the specific matches float to the top.
+ */
+function refinementBonus(title: string, rankQuery: string, floorQuery: string, category = ''): number {
+  // The AND-floor's SIGNIFICANT tokens (electronicsTokens drops single-char/stop-word fragments). A
+  // model-number discriminator like the "9" in "Pixel 9" is NOT a floor token, so it stays as EXTRA and
+  // can refine the ranking — distinguishing Pixel 9 from Pixel 8.
+  const floor = new Set(electronicsTokens(floorQuery));
+  const extra = canonicalizeElectronicsPhrase(rankQuery)
+    .split(' ')
+    .filter((t) => t && !floor.has(t) && !STOP_WORDS.has(t));
+  if (extra.length === 0) return 0;
+  const name = canonicalizeElectronicsPhrase(title);
+  const cat = canonicalizeElectronicsPhrase(category);
+  let bonus = 0;
+  for (const tok of extra) {
+    const variants = tok.length >= 2 ? expandToken(tok) : [tok];
+    // a numeric discriminator must match as a WHOLE token (so "9" floats Pixel 9 but not "...59...").
+    const whole = new RegExp(`(^|\\s)${escapeRe(tok)}($|\\s)`, 'u');
+    if (variants.some((v) => name.includes(v)) || whole.test(name)) bonus += 8;
+    else if (variants.some((v) => cat.includes(v)) || whole.test(cat)) bonus += 4;
+  }
+  return bonus;
 }
 
 // ───────────────────────── cross-provider grouping (pg_trgm-style) ─────────────────────────

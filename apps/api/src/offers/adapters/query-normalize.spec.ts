@@ -1,8 +1,10 @@
 import {
   normalizeProviderQuery,
+  relaxQueryVariants,
   editDistance,
   foldText,
 } from './query-normalize';
+import { canonicalizeElectronicsPhrase } from './electronics-relevance';
 import {
   filterDishesByQuery,
   isBeverage,
@@ -99,6 +101,58 @@ describe('query-normalize (C1+C2: AR → EN + typo correction before provider se
     it('folds Arabic diacritics + alef/ya/ta-marbuta', () => {
       expect(foldText('آيْفُون')).toBe('ايفون');
     });
+  });
+});
+
+/**
+ * RELAX-AND-RETRY discovery ladder (over-specific multi-word electronics → 0 cluster).
+ * The discovery term must relax to a robust core so an over-specified query still FINDS the product;
+ * the specific tokens still rank/filter on the RESULTS (covered in electronics-resolver.spec).
+ */
+describe('relaxQueryVariants (over-specific multi-word electronics → relaxed core)', () => {
+  // The resolver feeds the canonicalized normalized term in, so test that exact pipeline.
+  const ladderFor = (q: string) =>
+    relaxQueryVariants(canonicalizeElectronicsPhrase(normalizeProviderQuery(q, 'electronics')));
+
+  it('keeps the FULL specific term as the first (most-specific) rung', () => {
+    expect(ladderFor('Google Pixel 9')[0]).toBe('google pixel 9');
+  });
+
+  // The 10 verified failing→working pairs: each ladder must CONTAIN the working core that discovers.
+  const pairs: Array<[string, string]> = [
+    ['air conditioner split unit', 'air conditioner'],
+    ['vacuum cleaner Dyson', 'vacuum cleaner'],
+    ['Google Pixel 9', 'google pixel'],
+    ['AirPods Pro 2', 'airpods'],
+    ['Apple Watch Series 10', 'apple watch'],
+    ['LG OLED 65 TV', 'lg oled tv'],
+    ['Samsung side by side fridge', 'samsung fridge'],
+    ['front load washing machine LG', 'washing machine'],
+    ['Xiaomi phone', 'xiaomi'],
+    ['headphones under 50 KWD', 'headphones'],
+  ];
+  it.each(pairs)('relaxes %s → contains the discoverable core "%s"', (q, core) => {
+    expect(ladderFor(q)).toContain(core);
+  });
+
+  it('produces a price-stripped discoverable rung (the constraint belongs to ranking, not discovery)', () => {
+    const ladder = ladderFor('headphones under 50 KWD');
+    // the bare "headphones" core (no price phrase) must be present so discovery can succeed.
+    expect(ladder).toContain('headphones');
+    expect(ladder.some((r) => /under|kwd/.test(r))).toBe(true); // rung-0 keeps the full term (try first)
+  });
+
+  it('drops a model-number/size token wherever it sits, not just trailing ("lg oled 65 tv")', () => {
+    expect(ladderFor('LG OLED 65 TV')).toContain('lg oled tv');
+  });
+
+  it('a clean single-term query relaxes to just itself (no spurious rungs)', () => {
+    expect(relaxQueryVariants('dishwasher')).toEqual(['dishwasher']);
+  });
+
+  it('never returns an empty ladder', () => {
+    expect(relaxQueryVariants('').length).toBeGreaterThanOrEqual(1);
+    expect(relaxQueryVariants('iphone 16 pro max').length).toBeGreaterThanOrEqual(1);
   });
 });
 

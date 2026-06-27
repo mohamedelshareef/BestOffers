@@ -94,6 +94,20 @@ export default function SearchScreen() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [params.q]);
 
+  // DEMO-ONLY mount-once auto-run guard: on the static web export, expo-router hydrates with `params.q`
+  // already set, so the [params.q] effect above can be skipped (dep "unchanged since hydration"). When a
+  // deep-link arrives with skipclar=1 (demo deep-link only), fire run() exactly once on mount so the
+  // results render without a tap. Ref-guarded so it never double-fires; gated to skipclar so the normal
+  // ≥5-clarifier flow is untouched.
+  const demoFired = useRef(false);
+  useEffect(() => {
+    if (skipClarifiers && params.q && !demoFired.current) {
+      demoFired.current = true;
+      run(params.q);
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [skipClarifiers, params.q]);
+
   function applyResponse(res: SearchResponse) {
     setResponse(res);
     setPhase(res.state === 'clarifying' ? 'clarifying' : 'results');

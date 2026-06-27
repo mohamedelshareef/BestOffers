@@ -13,7 +13,7 @@ import {
   groupSimilarProducts,
   scoreProductTitle,
 } from './electronics-relevance';
-import { normalizeProviderQuery } from './query-normalize';
+import { normalizeProviderQuery, relaxQueryVariants } from './query-normalize';
 
 /**
  * Per-tier hard timeout (ADR-003 §4).
@@ -76,9 +76,18 @@ export class ElectronicsOfferResolver {
     const queryText = this.queryText(intent);
     if (!queryText) return { offers: [], providersTried: 0, providersFailed: 0 };
 
+    // RELAX-AND-RETRY discovery ladder (most-specific first). An over-specific multi-word query
+    // ("Google Pixel 9", "vacuum cleaner Dyson", "headphones under 50 KWD") over-constrains the
+    // provider search → 0 refs; each successive rung drops the most-specific trailing modifier so a
+    // genuinely-stocked product is still found. Relevance scoring below uses the ORIGINAL queryText,
+    // so the dropped tokens still rank/filter the RESULTS — they just can't zero out discovery.
+    const discoveryLadder = relaxQueryVariants(queryText);
+
     const providers = this.adapters.filter((a) => a.enabled && a.sector === 'electronics');
     const settled = await Promise.allSettled(
-      providers.map((a) => this.withDeadline(this.resolveOneProvider(a, queryText), PER_PROVIDER_DEADLINE_MS)),
+      providers.map((a) =>
+        this.withDeadline(this.resolveOneProvider(a, queryText, discoveryLadder), PER_PROVIDER_DEADLINE_MS),
+      ),
     );
 
     // Collect every provider's synthesized (title-carrying) hits, then group same-product across them.
@@ -111,38 +120,56 @@ export class ElectronicsOfferResolver {
     ]);
   }
 
-  private async resolveOneProvider(adapter: ProviderAdapter, queryText: string): Promise<ProviderResult> {
+  private async resolveOneProvider(
+    adapter: ProviderAdapter,
+    queryText: string,
+    discoveryLadder: string[] = [queryText],
+  ): Promise<ProviderResult> {
     const ctx = {
       ...DEFAULT_HTTP_CTX,
       timeoutMs: TIER_TIMEOUT_MS[adapter.tier] ?? DEFAULT_HTTP_CTX.timeoutMs,
     };
+    // Cache by the FULL specific query so two specific queries that relax to the same core still keep
+    // their own (differently-filtered) result sets.
     const cacheKey = `elec:${adapter.providerId}:${queryText}`;
 
     const cached = await this.cache.get(cacheKey);
     if (cached) return { hits: this.toHits(adapter, cached, 'cache', queryText), failed: false };
 
     try {
-      // Pass the raw query text + a hint skuId for the X-cite known-URL path. Over-fetch then trim.
-      const refs = await adapter.discover({ text: queryText, limit: PER_PROVIDER_LIMIT }, ctx);
-      if (refs.length === 0) {
-        adapter.health(); // healthy, just empty → NOT a failure (genuine no-match signal).
-        return { hits: [], failed: false };
+      // RELAX-AND-RETRY: walk the ladder most-specific FIRST; for each rung discover→fetch→filter, and
+      // stop at the first rung that yields a non-empty RELEVANT set. Crucially we re-check relevance per
+      // rung — an over-specific rung can DISCOVER (its core substring hits) yet then be over-constrained
+      // by its own extra token at the FILTER step (e.g. "vacuum cleaner DYSON" finds vacuums but the
+      // "dyson" AND-token drops the non-Dyson ones). Relaxing the FLOOR to the matched rung keeps them.
+      // The full original queryText still RANKS every rung's results (the specific match floats first).
+      let relevant: NormalizedOffer[] = [];
+      let anyDiscovered = false;
+      for (const term of discoveryLadder) {
+        const refs = await adapter.discover({ text: term, limit: PER_PROVIDER_LIMIT }, ctx);
+        if (refs.length === 0) continue;
+        anyDiscovered = true;
+
+        const perRef = await Promise.allSettled(refs.map((ref) => this.fetchExtract(adapter, ref, ctx)));
+        const normalized: NormalizedOffer[] = [];
+        for (const r of perRef) if (r.status === 'fulfilled') normalized.push(...r.value);
+
+        // RELEVANCE floor = THIS rung's term (the AND-filter); RANK by the full specific queryText so a
+        // closer specific match floats first without dropping the rest. Provider category path is an
+        // extra signal so brand/model-named devices still match.
+        relevant = filterProductsByQuery(
+          normalized.map((n) => Object.assign(n, { category: n.attrs.category })),
+          term,
+          queryText,
+        );
+        if (relevant.length > 0) break; // first rung with real, relevant hits wins.
       }
 
-      const perRef = await Promise.allSettled(refs.map((ref) => this.fetchExtract(adapter, ref, ctx)));
-      const normalized: NormalizedOffer[] = [];
-      for (const r of perRef) if (r.status === 'fulfilled') normalized.push(...r.value);
-
-      // RELEVANCE: drop hits that don't actually match the query (provider fuzzy-search noise). Pass the
-      // provider category path (attrs.category) as an extra signal so brand/model-named devices (a
-      // MacBook under a "laptop" query) still match.
-      const relevant = filterProductsByQuery(
-        normalized.map((n) => Object.assign(n, { category: n.attrs.category })),
-        queryText,
-      );
       if (relevant.length === 0) {
-        // The provider answered but nothing was relevant → a genuine miss, NOT a provider failure.
-        (adapter as any).markOk?.();
+        // Either no rung discovered anything, or what was found wasn't relevant → genuine miss (not a
+        // provider failure: the provider answered cleanly).
+        if (anyDiscovered) (adapter as any).markOk?.();
+        else adapter.health();
         return { hits: [], failed: false };
       }
 

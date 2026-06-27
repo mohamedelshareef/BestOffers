@@ -14,7 +14,7 @@
     },
     "newArchEnabled": true,
     "extra": {
-      "apiBaseUrl": "http://localhost:3000"
+      "apiBaseUrl": ""
     },
     "plugins": ["expo-router"],
     "experiments": {

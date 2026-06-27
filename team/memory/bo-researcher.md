@@ -60,6 +60,13 @@
 - **Posting patterns:** aggregators/meal-prep/roasteries post most days (rich 20-30d window); home-bakers/kitchens sporadic + Story-heavy (24h expiry = MISS risk for 30d history). Many offers = "price via DM" (no price in post) → need policy. Prices often baked into image poster → may need OCR not just caption NLP. AR-first + AR/EN mix + dialect + emoji.
 - **Open for PO:** (1) how many accts to start (recommend ~15-20: aggregators + meal-prep first); (2) AR/EN handling; (3) price-less/DM-only posts — show as "price on request" vs drop?; (4) Story-only & image-baked-price offers — capture (OCR/live) or skip?; (5) IG ingestion legality + method sign-off.
 
+## Kuwait area gazetteer (2026-06-27) — ADR-007 Q3, RE area matching generalize
+- **Built COMPLETE KW residential gazetteer → `team/research/kuwait-area-gazetteer.json` (84 areas, 6 governorates)** + `.md` summary. Replaces the prior 12-area AREA_GROUPS in `realestate-relevance.ts` (too small — Jabriya/Mishref leaked/missed).
+- Each entry = `{en, ar, aliases:[EN translit + AR with/without ال + ة/ه ى/ي variants], governorate}`. DROP-IN ready: slug(en)→aliases = AREA_GROUPS.
+- VERIFIED vs EN Wikipedia "Areas of Kuwait" + AR "قائمة مناطق الكويت" (fetched 2026-06-27). Counts: Capital 25 · Hawalli 19 · Farwaniya 17 · Ahmadi 18 · Jahra 12 · MubarakAlKabeer 11.
+- EXCLUDED on purpose (not flat-rental → keeps matcher precise): industrial/port (Shuaiba, Subhan, Amghara, Ardiya Herafiya, Mina Abdulla port), agri/desert/outlying (Wafra, Abdali, Salmi, Kabd, Subiya, Bahra, Kazma, Nuwaiseeb, Zoor, Failaka). Kept new-but-rented megaprojects (Mutlaa, Saad Al-Abdullah, Sabah Al-Ahmad City, Khairan City).
+- Dev caveat: two "Qairawan/Qaisariya" (Capital القيروان vs Jahra القيصرية) kept as separate keys; Salwa سلوى/السالوة both aliased. Handed to bo-dev-lead to wire.
+
 ## Key decisions / validated findings (sourced; see artifacts for URLs+dates)
 - **Category white space confirmed:** no KW player does AI-conversational, cross-provider, intent-first, Arabic-first offer discovery. Closest = PriceScout (electronics price-tracking) — narrow (phones), catalog/filter UX, English-leaning, NOT conversational. That's the gap to own.
 - **Electronics = day-1 feasible.** Xcite/Eureka/Best Al-Yousifi = public SKU-level catalogs; PriceScout proves multi-retailer scrape works in KW. Xcite has affiliate programs (ArabClicks/Admitad/DCMnetwork) = ToS-blessed channel + referral revenue. Recommend hybrid: affiliate-where-available + resilient scrape, SKU-grouping, live+short-TTL cache.

@@ -7,7 +7,12 @@ import {
   ResultCard,
   SearchResponse,
 } from '@bestoffers/shared';
-import { CLAUDE_CLIENT, ClaudeClient } from '../ai/claude-client.interface';
+import {
+  CLAUDE_CLIENT,
+  ClarifierInput,
+  ClarifierResult,
+  ClaudeClient,
+} from '../ai/claude-client.interface';
 import { OffersService, ResolvedOffer } from '../offers/offers.service';
 import { rankOffers } from './ranker';
 import {
@@ -69,7 +74,7 @@ export class SearchService {
     // are independent fast-model calls, so the clarifier phase pays ONE Haiku round-trip, not two
     // sequential ones. The smart set is generated from the RAW intent + sector (it doesn't need the
     // normalized output); pre-resolved dimensions are deduped post-hoc against the normalized intent.
-    const clarP = this.claude.clarify({
+    const clarP = this.clarifyWithFallback({
       intentRaw: req.intentRaw,
       sector: req.sector,
       locale: req.locale,
@@ -173,6 +178,32 @@ export class SearchService {
 
     // Floor met (or no more questions available) → dispatch to providers (RULE-4: skip-all still searches).
     return this.runSearch(session);
+  }
+
+  /**
+   * RESILIENCE (QA defect, 2026-06-27): a Claude OUTAGE (credit depleted → 400, network/timeout, any
+   * throw) must DEGRADE the search, never 500 it. `clarify()` is a per-request Claude call inside the
+   * intent path; if it rejects we fall back to a deterministic, config-driven intent so the user still
+   * gets the ≥5 clarifiers (from `clarifier-sets.ts`) and reaches REAL provider results (the providers
+   * don't need Claude). This mirrors the fallback `generateClarifierSet` already uses for `clarifierSet`.
+   *
+   * The fallback `intentNormalized` is intentionally minimal: empty constraints + `model` = raw query.
+   * That is enough for the whole downstream flow — `pinIntentToSector` pins category=sector + model=raw
+   * for the food/RE discovery lanes (and seeds model for off-catalog electronics), and the config
+   * clarifier gate pre-resolves the food/RE `dish`/`area` dimension off the raw text. No Claude needed.
+   */
+  private async clarifyWithFallback(input: ClarifierInput): Promise<ClarifierResult> {
+    try {
+      return await this.claude.clarify(input);
+    } catch (err) {
+      this.logger.warn(
+        `clarify() failed (${(err as Error).message}) → deterministic config-driven intent (search degrades, not 500)`,
+      );
+      return {
+        intentNormalized: { model: input.intentRaw.trim(), constraints: {} },
+        needClarification: true,
+      };
+    }
   }
 
   /**
