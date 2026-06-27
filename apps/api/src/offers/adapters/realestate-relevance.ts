@@ -16,21 +16,14 @@
  *     nuke a free-form RE query). Truthful by construction: we only filter REAL discovered flats.
  */
 
-/** Canonical Kuwait area keys → all AR + EN spellings/aliases that denote that area. */
-const AREA_GROUPS: Record<string, string[]> = {
-  salmiya: ['salmiya', 'salmiyah', 'السالمية', 'السالميه', 'سالمية', 'سالميه'],
-  salwa: ['salwa', 'salwah', 'السالوة', 'السالوه', 'سالوة', 'سالوه'],
-  mahboula: ['mahboula', 'mahboola', 'المهبولة', 'المهبوله', 'مهبولة', 'مهبوله'],
-  hawally: ['hawally', 'hawalli', 'حولي', 'حولى'],
-  jabriya: ['jabriya', 'jabriyah', 'الجابرية', 'الجابريه', 'جابرية', 'جابريه'],
-  mangaf: ['mangaf', 'mangef', 'المنقف', 'منقف'],
-  fintas: ['fintas', 'الفنطاس', 'فنطاس'],
-  fahaheel: ['fahaheel', 'fahaheal', 'الفحيحيل', 'فحيحيل'],
-  jahra: ['jahra', 'jahraa', 'الجهراء', 'جهراء'],
-  farwaniya: ['farwaniya', 'farwaniyah', 'الفروانية', 'الفروانيه', 'فروانية'],
-  sharq: ['sharq', 'شرق'],
-  bneid_alqar: ['bneid', 'bneidalqar', 'بنيد القار', 'بنيدالقار'],
-};
+/**
+ * Canonical Kuwait area keys → all AR + EN spellings/aliases that denote that area.
+ * Generated from the 84-area researcher gazetteer (ADR-007 Q3) — replaces the old hand-maintained ~12-area
+ * map so EVERY Kuwait area a user can name resolves (no Jabriya→wrong-area leaks, no unlisted-area pass-through).
+ * See `kuwait-areas.ts` for the build (slug collision + AR spelling-variant handling).
+ */
+import { AREA_GROUPS, AREA_GOVERNORATE, GOVERNORATE_ALIASES, GOVERNORATE_MARKERS } from './kuwait-areas';
+export { AREA_GROUPS };
 
 /** "nearby/قريب" markers — a flat explicitly offered as near the asked area is kept (closest-match). */
 const NEARBY_MARKERS = ['nearby', 'near ', 'close to', 'قريب', 'بجانب', 'يبعد', 'مجاور', 'جنب'];
@@ -98,15 +91,38 @@ export function normalizeAreaText(s: string): string {
     .trim();
 }
 
+/**
+ * Does `alias` denote an area name inside `hay` (both already normalized)?
+ *
+ * With 84 areas a naive `hay.includes(alias)` cross-matches: short aliases like "rai"/"ري" appear INSIDE
+ * unrelated words ("للايجار", "الجابرية") and falsely tag the query. So we match per-TOKEN:
+ *   - a query token equals the alias, OR
+ *   - a query token equals the alias after stripping a single leading AR particle (ب/ل/و/ف/ك/ال) — this is
+ *     the only "glued" form that genuinely occurs (بالسالمية = ب+ال+سالمية), and we still anchor the END.
+ * Multi-word aliases ("بنيد القار", "sabah al salem") fall back to a contiguous-substring check (they're
+ * long enough that a spurious match is implausible).
+ */
+const AR_PARTICLE_PREFIX = /^(?:بال|فال|وال|كال|لل|ال|ب|ل|و|ف|ك)/;
+
+function aliasInText(alias: string, hayTokens: string[], hayRaw: string): boolean {
+  if (!alias) return false;
+  if (alias.includes(' ')) return hayRaw.includes(alias); // multi-word: contiguous match
+  for (const tok of hayTokens) {
+    if (tok === alias) return true;
+    const stripped = tok.replace(AR_PARTICLE_PREFIX, '');
+    if (stripped === alias && stripped !== tok) return true; // particle-glued AR form (بالسالمية)
+  }
+  return false;
+}
+
 /** Which canonical area(s) does the query name? Empty when the query names no recognizable area. */
 export function detectQueryAreas(query: string): Set<string> {
   const q = normalizeAreaText(query);
+  const tokens = q.split(' ').filter(Boolean);
   const found = new Set<string>();
   for (const [canon, aliases] of Object.entries(AREA_GROUPS)) {
     for (const alias of aliases) {
-      const a = normalizeAreaText(alias);
-      // whole-word OR substring (Aranic area names are often glued to particles like "بالسالمية")
-      if (a && q.includes(a)) {
+      if (aliasInText(normalizeAreaText(alias), tokens, q)) {
         found.add(canon);
         break;
       }
@@ -119,13 +135,37 @@ export function detectQueryAreas(query: string): Set<string> {
 export function detectOfferArea(areaText?: string, captionText?: string): string | null {
   const hay = normalizeAreaText(`${areaText ?? ''} ${captionText ?? ''}`);
   if (!hay) return null;
+  const tokens = hay.split(' ').filter(Boolean);
   for (const [canon, aliases] of Object.entries(AREA_GROUPS)) {
     for (const alias of aliases) {
-      const a = normalizeAreaText(alias);
-      if (a && hay.includes(a)) return canon;
+      if (aliasInText(normalizeAreaText(alias), tokens, hay)) return canon;
     }
   }
   return null;
+}
+
+/**
+ * Optional governorate-level fallback (low-risk): only when the query carries an EXPLICIT governorate
+ * marker ("محافظة الأحمدي" / "Ahmadi governorate") do we read it as a governorate. This avoids the
+ * area/governorate name overlap (a bare "Ahmadi"/"Hawally" stays the specific AREA). Returns the named
+ * governorate(s) → any area in them is acceptable.
+ */
+export function detectQueryGovernorates(query: string): Set<string> {
+  const q = normalizeAreaText(query);
+  const markers = GOVERNORATE_MARKERS.map(normalizeAreaText);
+  const hasMarker = markers.some((m) => m && q.includes(m));
+  if (!hasMarker) return new Set();
+  const tokens = q.split(' ').filter(Boolean);
+  const found = new Set<string>();
+  for (const [gov, aliases] of Object.entries(GOVERNORATE_ALIASES)) {
+    for (const alias of aliases) {
+      if (aliasInText(normalizeAreaText(alias), tokens, q)) {
+        found.add(gov);
+        break;
+      }
+    }
+  }
+  return found;
 }
 
 export interface FlatCandidate {
@@ -191,6 +231,18 @@ export function filterFlatsByQuery<T extends FlatCandidate>(
   const askedTenure = opts.tenure ?? detectQueryTenure(query);
   items = filterFlatsByTenure(items, askedTenure);
 
+  // Low-risk GOVERNORATE-level fallback: an explicit "محافظة <gov>" / "<gov> governorate" query keeps flats
+  // in ANY area of that governorate (overrides the specific-area branch — "محافظة الأحمدي" should keep
+  // Fahaheel/Mangaf/…, not only the Ahmadi sub-area). Triggered only by an explicit marker, so it never
+  // mis-fires on a bare area name.
+  const askedGovs = detectQueryGovernorates(query);
+  if (askedGovs.size > 0) {
+    return items.filter((item) => {
+      const offerArea = detectOfferArea(item.area, item.text);
+      return !!offerArea && askedGovs.has(AREA_GOVERNORATE[offerArea]);
+    });
+  }
+
   const askedAreas = detectQueryAreas(query);
   if (askedAreas.size === 0) return items; // no area constraint → don't nuke free-form RE queries
 
@@ -203,9 +255,10 @@ export function filterFlatsByQuery<T extends FlatCandidate>(
       continue;
     }
     // not the asked area → only keep if it explicitly says it's NEAR an asked area
-    const hay = normalizeAreaText(item.text || '');
+    const hayTokens = normalizeAreaText(item.text || '').split(' ').filter(Boolean);
+    const hayRaw = normalizeAreaText(item.text || '');
     const namesAskedArea = [...askedAreas].some((canon) =>
-      AREA_GROUPS[canon].some((al) => hay.includes(normalizeAreaText(al))),
+      AREA_GROUPS[canon].some((al) => aliasInText(normalizeAreaText(al), hayTokens, hayRaw)),
     );
     const taggedNearby = NEARBY_MARKERS.some((m) => (item.text || '').toLowerCase().includes(m.toLowerCase()));
     if (namesAskedArea && taggedNearby) nearby.push(item);

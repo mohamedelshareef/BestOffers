@@ -1,4 +1,5 @@
 import {
+  AREA_GROUPS,
   detectOfferArea,
   detectOfferTenure,
   detectQueryAreas,
@@ -89,6 +90,85 @@ describe('realestate-relevance — strict area matching (AR + EN aliases)', () =
       const out = filterFlatsByQuery(flats, 'cheap furnished apartment');
       expect(out.map((f) => f.area)).toEqual(['Salmiya', 'Salwa', 'Mahboula', 'Jabriya']);
     });
+  });
+});
+
+/**
+ * ADR-007 Q3 — full 84-area Kuwait gazetteer wired into AREA_GROUPS (was a hand-maintained ~12-area map).
+ * Every Kuwait area a user can name must resolve to the RIGHT area (fixes Jabriya→wrong-area leaks and
+ * unlisted-area pass-through). These lock the previously-leaking / previously-missing areas + the flagged
+ * gazetteer caveats (same-romanization collision, Salwa dual spelling) + the governorate fallback.
+ */
+describe('realestate-relevance — 84-area gazetteer (ADR-007 Q3)', () => {
+  it('exposes the full gazetteer, not just the old ~12 hand-areas', () => {
+    expect(Object.keys(AREA_GROUPS).length).toBeGreaterThanOrEqual(84);
+  });
+
+  it('previously-leaking / previously-missing areas now resolve (EN + AR)', () => {
+    const cases: Array<[string, string]> = [
+      ['flat in Jabriya', 'jabriya'],
+      ['شقة في الجابرية', 'jabriya'],
+      ['apartment in Mishref', 'mishref'],
+      ['شقة في مشرف', 'mishref'],
+      ['flat in Bayan', 'bayan'],
+      ['شقة في بيان', 'bayan'],
+      ['Rumaithiya apartment', 'rumaithiya'],
+      ['شقة في الرميثية', 'rumaithiya'],
+      ['flat in Mahboula', 'mahboula'],
+      ['شقة في المهبولة', 'mahboula'],
+      ['Mangaf flat', 'mangaf'],
+      ['شقة في المنقف', 'mangaf'],
+      ['Fintas apartment', 'fintas'],
+      ['شقة في الفنطاس', 'fintas'],
+      ['flat in Sabah Al-Salem', 'sabah_al_salem'],
+      ['شقة في صباح السالم', 'sabah_al_salem'],
+    ];
+    for (const [q, expected] of cases) {
+      expect([...detectQueryAreas(q)]).toEqual([expected]);
+    }
+  });
+
+  it('an UNLISTED-before area (Mishref) now matches and a different-area flat is EXCLUDED', () => {
+    const flats = [
+      { area: 'Mishref', text: '3BR · Mishref · villa floor' },
+      { area: 'Salmiya', text: '1BR · Salmiya · semi' },
+      { area: 'Jabriya', text: '2BR · Jabriya' },
+    ];
+    const out = filterFlatsByQuery(flats, 'flat in Mishref');
+    expect(out.map((f) => f.area)).toEqual(['Mishref']);
+    expect(out.some((f) => f.area === 'Salmiya')).toBe(false);
+    expect(out.some((f) => f.area === 'Jabriya')).toBe(false);
+  });
+
+  it('CAVEAT: same-romanization areas stay SEPARATE keys (Capital القيروان vs Jahra القيصرية)', () => {
+    const qairawan = detectOfferArea('القيروان');
+    const qaisariya = detectOfferArea('القيصرية');
+    expect(qairawan).not.toBeNull();
+    expect(qaisariya).not.toBeNull();
+    expect(qairawan).not.toBe(qaisariya); // never merged into one bucket
+  });
+
+  it('CAVEAT: Salwa resolves from BOTH سلوى and السالوة spellings', () => {
+    expect([...detectQueryAreas('شقة في سلوى')]).toEqual(['salwa']);
+    expect([...detectQueryAreas('شقة في السالوة')]).toEqual(['salwa']);
+  });
+
+  it('does NOT false-match a short alias inside an unrelated word (الجابرية ⊅ الري)', () => {
+    // "ري"/"rai" (Al-Rai area) must not be tagged from "الجابرية"/"للايجار".
+    expect([...detectQueryAreas('شقة في الجابرية للايجار')]).toEqual(['jabriya']);
+  });
+
+  it('governorate fallback: a governorate-named query keeps that governorate’s areas', () => {
+    const flats = [
+      { area: 'Fahaheel', text: '2BR · Fahaheel' }, // Ahmadi gov
+      { area: 'Mangaf', text: '1BR · Mangaf' }, // Ahmadi gov
+      { area: 'Salmiya', text: '1BR · Salmiya' }, // Hawalli gov
+    ];
+    const out = filterFlatsByQuery(flats, 'شقق في محافظة الاحمدي');
+    const areas = out.map((f) => f.area);
+    expect(areas).toContain('Fahaheel');
+    expect(areas).toContain('Mangaf');
+    expect(areas).not.toContain('Salmiya'); // different governorate dropped
   });
 });
 

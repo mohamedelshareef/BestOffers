@@ -2,6 +2,43 @@
 
 > READ at task start. UPDATE at end with durable facts only. Keep lean; prune stale.
 
+## ADR-007 Q3 — 84→100-area Kuwait gazetteer wired into RE AREA_GROUPS (2026-06-27, 320/320 api, REAL-proven, NO git)
+- **GOAL:** replace the hand-maintained ~12-area `AREA_GROUPS` (realestate-relevance.ts) with the full
+  researcher gazetteer so EVERY KW area resolves (fix Jabriya→wrong-area leaks + unlisted-area pass-through).
+- **NEW `offers/adapters/kuwait-areas.ts`** generates `AREA_GROUPS` from `team/research/kuwait-area-
+  gazetteer.json` (file has **100 areas**, not the briefed 84 — reported real count). slug(en)→aliases
+  (EN translit + AR with/without ال + ة/ه + ى/ي variants, PLUS auto-gen AR spelling variants per alias).
+  Loaded at runtime via `fs.readFileSync` (NOT a JSON import — keeps it outside `src` so no tsc rootDir
+  warning); path resolves from __dirname (5 up = repo root), env override `KUWAIT_AREA_GAZETTEER_PATH` for
+  tests. realestate-relevance.ts now `import { AREA_GROUPS, AREA_GOVERNORATE, GOVERNORATE_ALIASES,
+  GOVERNORATE_MARKERS } from './kuwait-areas'` + re-exports AREA_GROUPS. Tenure/price-sanity/NEARBY_MARKERS
+  untouched.
+- **CAVEATS handled:** (1) two same-romanization "Qairawan" en (Capital القيروان vs Jahra القيصرية) →
+  on slug COLLISION append governorate slug → keys `qairawan_capital` / `qairawan_jahra`, aliases NEVER
+  merge. (2) Salwa carries BOTH سلوى and السالوة (both in gazetteer aliases, both resolve).
+- **CRITICAL FALSE-MATCH FIX (would have broken existing tests):** old matcher used `hay.includes(alias)`
+  SUBSTRING — at 100 areas short aliases like "rai"/"ري" (Al-Rai) matched INSIDE الجابرية/للايجار →
+  `detectQueryAreas('شقة في الجابرية للايجار')` wrongly returned `['jabriya','rai']`. FIX: NEW `aliasInText`
+  matches per-TOKEN (token===alias) OR an AR particle-glued form (strip leading بال/فال/لل/ال/ب/ل/و/ف/ك
+  then ===alias — covers بالسالمية); multi-word aliases fall back to contiguous substring. Used by
+  detectQueryAreas + detectOfferArea + the namesAskedArea nearby check. KEEP THIS — substring matching is
+  unsafe at this area count.
+- **GOV-LEVEL FALLBACK (low-risk, marker-gated):** `detectQueryGovernorates` fires ONLY when an explicit
+  GOVERNORATE_MARKER present (محافظة/governorate) — avoids the area/gov name overlap (bare "Ahmadi"/"Hawally"
+  stays the specific AREA). `filterFlatsByQuery` checks govs FIRST: "محافظة الأحمدي" keeps ANY Ahmadi-gov
+  area (Fahaheel/Mangaf/…), drops other govs. AREA_GOVERNORATE maps key→gov slug.
+- **REAL VERIFIED (booted :3417, mock claude/social/extractor, LIVE_FETCH=off, isolated, NO git):**
+  "شقة للايجار في الجابرية" → 1 card "2BR · Jabriya · semi · For rent" (@jabriya.homes, correct area+tenure);
+  "المهبولة" → 1 Mahboula card; "مشرف" (Mishref — real KW area, NOT in mock seed) → **state=empty,
+  coverageReason=genuine_no_match** = previously-unlisted area now resolves AND drops off-area flats (no leak).
+- **Tests +7 (313→320):** realestate-relevance.spec NEW "84-area gazetteer" block: ≥84 keys; 16 previously-
+  leaking/missing areas resolve EN+AR (Jabriya/Mishref/Bayan/Rumaithiya/Mahboula/Mangaf/Fintas/Sabah Al-Salem);
+  unlisted-before area matches + different-area flat excluded; Qairawan collision stays separate keys; Salwa
+  dual-spelling; الجابرية⊅الري false-match guard; gov fallback. RUN: `cd apps/api && npx jest --runInBand`.
+- **DURABLE:** AREA_GROUPS is now GENERATED — to add areas edit the gazetteer JSON, not code. NEVER revert to
+  substring alias matching. Mock RE seed only has 6 areas (Salmiya/Salwa/Mahboula/Hawally/Jabriya/Mangaf) so
+  most of the 100 areas have no seed flat → honest-empty by design until live IG provides them.
+
 ## RELAX-AND-RETRY discovery — over-specific multi-word electronics no longer 0 (2026-06-27, 313/313 api, REAL-proven, NO git)
 - **BUG (300-case cluster):** over-specific multi-word electronics queries returned EMPTY because extra
   model-suffix/size/form-factor/price tokens OVER-CONSTRAINED the provider DISCOVERY search even though the
