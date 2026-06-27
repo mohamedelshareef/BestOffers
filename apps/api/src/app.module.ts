@@ -4,6 +4,7 @@ import { AuthModule } from './auth/auth.module';
 import { AccountsModule } from './accounts/accounts.module';
 import { BillingModule } from './billing/billing.module';
 import { QuotaModule } from './quota/quota.module';
+import { AuditModule } from './audit/audit.module';
 
 @Controller('health')
 class HealthController {
@@ -28,7 +29,8 @@ class HealthController {
 
 @Module({
   // AuthModule is @Global → DbService/JwtService/AuthGuard injectable everywhere. Order: auth first.
-  imports: [AuthModule, AccountsModule, BillingModule, QuotaModule, SearchModule],
+  // AuditModule is @Global → records EVERY request (interceptor + filter) via the DbService from AuthModule.
+  imports: [AuthModule, AuditModule, AccountsModule, BillingModule, QuotaModule, SearchModule],
   controllers: [HealthController],
 })
 export class AppModule {}

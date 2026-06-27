@@ -25,8 +25,14 @@ export interface AnalyticsEvent {
   payload: Record<string, unknown>; // bucketed/normalized only — NO PII, NO free text
 }
 
-/** Keys that must NEVER appear in an event payload (defense-in-depth, validated at the sink). */
+/**
+ * Keys that must NEVER appear in an event payload OR an audit_trail row (defense-in-depth, validated
+ * at the sink). ONE source of truth — the events sink and the ADR-009 audit recorder both gate on it.
+ * Matching is case-insensitive and substring-aware in the audit redactor (so `Authorization`,
+ * `stripe_client_secret`, `supabase_service_role_key` etc. are all caught), so list canonical stems.
+ */
 export const PII_FORBIDDEN_KEYS = [
+  // — phone / identity PII (the original privacy-wall set) —
   'phone',
   'phone_e164',
   'phoneE164',
@@ -34,6 +40,40 @@ export const PII_FORBIDDEN_KEYS = [
   'name',
   'intentRaw',
   'intent_raw',
+  // — credentials / OTP —
   'code',
   'otp',
+  'password',
+  'passwd',
+  'magiclink',
+  'magic_link',
+  // — auth tokens / secrets (ADR-009 never-log list) —
+  'authorization',
+  'cookie',
+  'set-cookie',
+  'bearer',
+  'jwt',
+  'token',
+  'access_token',
+  'accessToken',
+  'refresh',
+  'refresh_token',
+  'refreshToken',
+  'apikey',
+  'api_key',
+  'apify_token',
+  'service_role',
+  'service_role_key',
+  'webhook_secret',
+  'signing_secret',
+  'secret',
+  'key',
+  // — payment data —
+  'card',
+  'card_number',
+  'cardNumber',
+  'cvv',
+  'cvc',
+  'client_secret',
+  'clientSecret',
 ] as const;

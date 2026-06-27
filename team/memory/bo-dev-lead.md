@@ -2,6 +2,64 @@
 
 > READ at task start. UPDATE at end with durable facts only. Keep lean; prune stale.
 
+## ADR-009 AUDIT TRAIL — every API call recorded to DB (2026-06-27, 358/358 api, REAL+redaction-proven, NO git)
+- **GOAL:** total operational audit — EVERY HTTP request recorded once to `audit_trail`, off the request
+  path (fire-and-forget), dual-engine (sqlite+pg), HARD redaction (no secret/OTP/phone/token ever stored).
+- **NEW module `src/audit/`:** `audit.types.ts` (frozen `AuditRow`/`AuditRecorder`), `audit.redact.ts`
+  (the redactor), `audit-recorder.service.ts`, `audit.context.ts` (route extraction + row build),
+  `audit.interceptor.ts` (APP_INTERCEPTOR), `audit.exception-filter.ts` (APP_FILTER), `audit.module.ts`
+  (@Global). Wired into `app.module.ts` imports (after AuthModule — needs its @Global DbService).
+- **MIGRATIONS (pair, idempotent):** `src/db/migrations/0006_audit_trail.sql` (sqlite) + `src/db/postgres/
+  0006_audit_trail.sql` (uuid PK gen_random_uuid, timestamptz, jsonb summaries, partial idx_audit_errors
+  WHERE status_code>=500). Cols per ADR; idx on ts/route/actor. NOTE migrations live under `src/db/`, NOT
+  `db/` (ADR said db/ — corrected to match repo). `npm run migrate` (ts-node src/db/migrate.ts, SQLITE_PATH
+  for isolation) shows `audit_trail` in table list. **Compiled `dist/db/migrate.js` does NOT find migrations
+  (tsc doesn't copy .sql to dist/db/migrations) — run migrate via ts-node, not dist.**
+- **REDACTION (`audit.redact.ts`, ONE source of truth):** extended `PII_FORBIDDEN_KEYS` in
+  `packages/shared/src/events.ts` (+ auth/secret/payment stems: authorization/cookie/bearer/jwt/token/
+  refresh/api_key/apify_token/service_role/webhook_secret/secret/key/card/cvv/client_secret/password/…) —
+  shared by BOTH the events sink AND the audit recorder. **MUST rebuild shared (`cd packages/shared &&
+  npm run build`) for the booted dist to see the new keys** (jest reads shared src directly via
+  moduleNameMapper, so tests don't need it; the running app does). `forbiddenKey(key)` is TOKEN-aware
+  (camelCase + delimiter split) NOT naive substring — so `refresh_token`/`x-api-key`/`stripeClientSecret`
+  flag but benign `cards`(count)/`route` do NOT falsely match the `card`/no stem (the bug: substring `card`
+  matched `cards`). Collapsed-form check catches camelCase `intentRaw`→`intent_raw`. `redactString(s)`
+  scrubs VALUES of KEPT free-text (query, error_message): bearer/jwt/stripe-prefix/32+hex/email/4+digit-run
+  (catches a bare 6-digit OTP + phone fragments). `sanitizeObject(obj,allow)` = allow-list only +
+  deny-by-default. `ipHash(ip,salt)` = HMAC-SHA256 (never raw IP; AUDIT_IP=off → null).
+- **RECORDER (`audit-recorder.service.ts`):** bounded queue (AUDIT_QUEUE_MAX=5000, drop OLDEST on overflow),
+  batched single INSERT (200/batch) via Db port (`?` placeholders → pg-safe), self-protecting (DB throw
+  caught, NEVER propagates), `enqueue()` never throws, `AUDIT_ENABLED=false` kill-switch (no-op), final
+  `scrub()` pass before store. `flush()` test seam. Mirrors EventsService fire-and-forget contract.
+- **INTERCEPTOR + FILTER:** interceptor mints request_id (uuid) → `x-request-id` header, captures
+  route(template via PATH_METADATA of getClass()+getHandler()), method, path(query stripped), actor
+  (`req.auth.pseudoId` else 'anon'), ip_hash, UA, sector+normalized-query for /search/* only, req/res
+  bytes, response_summary (counts/state shape only). Records on `tap.next` (success). **Error path is
+  recorded by the FILTER** (@Catch all) — it has the mapped status_code + error_code(exception name) +
+  sanitized message, then DELEGATES to httpAdapter.reply so client still gets normal error. De-dup via
+  `req.__auditRecorded` (filter sets it → interceptor.tap skips). One row per request. NOTE: search
+  controller decodes its OWN bearer (no global guard), so actor on /search is usually 'anon' unless a guard
+  attached req.auth upstream.
+- **REAL VERIFIED (booted compiled dist :3491, mock providers, LIVE_FETCH=off, isolated /tmp/bo-audit-
+  verify.sqlite, NO git):** 4 reqs → 4 rows. /health[200], /search/intent food[201] query=
+  `"kfc my otp is [redacted] call me [redacted]"` (OTP+phone scrubbed, intent kept), /auth/otp/verify[401]
+  error_code=UnauthorizedException (error path via filter, client still 401), /search/intent elec[201]
+  query="iphone 16". x-request-id on EVERY response incl. error. **REDACTION SCAN of whole table = 0 leaks**
+  for sk_live_/refresh_token=zzz999/hunter2/654321/96599887766/authorization/000000 — none present (raw
+  intentRaw, Authorization header, Cookie, password never entered a row). Kill-switch real-checked:
+  AUDIT_ENABLED=false → health 200 but 0 new rows.
+- **Tests +13 (345→358):** `audit-recorder.spec.ts` (redact key-class flagging, value scrub, sanitizeObject
+  allow-list, ipHash; enqueue→flush→row, secret/OTP/phone NEVER stored, DB-throw self-protect, kill-switch,
+  backpressure drop) + `audit.e2e.spec.ts` (real Nest app + supertest: one row/req w/ route/status/duration
+  + x-request-id, error path via filter w/ error_code, hostile header/body never logged, health actor=anon).
+  RUN: `cd apps/api && npx jest --runInBand`. Uses REAL in-memory sqlite w/ 0006 applied.
+- **STILL TODO (ADR-009 Slice D):** prune job (BullMQ daily DELETE WHERE ts<cutoff, batch LIMIT 5000) NOT
+  built (deferred — needs ADR-008 Redis scheduler). Pg 0006 not pushed to Supabase. `query` column stores
+  normalized search text = small PII surface (scrubbed) — flag to PO/counsel; droppable to a boolean.
+- **DURABLE:** any new audit field → add to the explicit allow-list in audit.context.ts (deny-by-default);
+  NEVER dump raw req/res. To forbid a new key, add the stem to PII_FORBIDDEN_KEYS (shared) — ONE source of
+  truth; rebuild shared for the booted app.
+
 ## OWNER BUG "Samsung phone"→Adonit STYLUS — brand+type enforcement in electronics relevance (2026-06-27, 345/345 api, REAL-proven, NO git)
 - **BUG (live, real):** "Samsung phone" returned Adonit Jot Pro / Mini STYLUSES (7.5/8.0 KWD, Blink) — not
   Samsung, not phones. ROOT CAUSE (two parts): (1) the typo-corrector snapped "phone"→"iphone" (1-edit), so
