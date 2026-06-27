@@ -74,12 +74,16 @@ export class AnthropicSocialExtractor implements SocialExtractor {
         restaurant: String(out.restaurant ?? post.ownerHandle).trim(),
       };
     }
+    const price = numOrNull(out.priceFils);
     return {
       vertical: 'realestate',
       isOffer: !!out.isOffer,
+      tenure: out.tenure === 'rent' || out.tenure === 'sale' ? out.tenure : null,
       area: out.area ? String(out.area).trim() : null,
       rooms: numOrNull(out.rooms),
-      rentFils: numOrNull(out.rentFils),
+      priceFils: price,
+      priceUnit: out.priceUnit === 'month' || out.priceUnit === 'total' ? out.priceUnit : null,
+      rentFils: price, // backward-compatible alias
       furnished: ['furnished', 'semi', 'unfurnished'].includes(out.furnished) ? out.furnished : null,
     };
   }
@@ -114,16 +118,33 @@ const FOOD_TOOL = {
 
 const RE_TOOL = {
   name: 'emit_realestate_offer',
-  description: 'Return the structured flat listing extracted from the caption. rent null unless literally present.',
+  description:
+    'Return the structured flat listing extracted from the caption. Distinguish RENT vs SALE and copy ' +
+    'the price only if literally present. A Kuwait monthly rent is realistically ~50–3000 KWD; a value ' +
+    'like 100,000+ KWD is a SALE price (tenure=sale, priceUnit=total), NOT a monthly rent.',
   input_schema: {
     type: 'object',
     properties: {
       isOffer: { type: 'boolean' },
+      tenure: {
+        type: ['string', 'null'],
+        enum: ['rent', 'sale', null],
+        description:
+          'rent if للإيجار/for rent/شهري/monthly; sale if للبيع/تمليك/for sale; null if the caption does not say',
+      },
       area: { type: ['string', 'null'], description: 'area/governorate e.g. Salwa, Salmiya, Mahboula' },
       rooms: { type: ['integer', 'null'], description: 'number of bedrooms; null if unstated' },
-      rentFils: { type: ['integer', 'null'], description: 'monthly rent integer fils, or null if "DM/price on request"' },
+      priceFils: {
+        type: ['integer', 'null'],
+        description: 'the listed price in integer fils (monthly rent OR sale price), null if "DM/price on request"',
+      },
+      priceUnit: {
+        type: ['string', 'null'],
+        enum: ['month', 'total', null],
+        description: 'month for a monthly rent, total for a sale/lump price; null if unstated',
+      },
       furnished: { type: ['string', 'null'], enum: ['furnished', 'semi', 'unfurnished', null] },
     },
-    required: ['isOffer', 'area', 'rooms', 'rentFils', 'furnished'],
+    required: ['isOffer', 'tenure', 'area', 'rooms', 'priceFils', 'priceUnit', 'furnished'],
   },
 };

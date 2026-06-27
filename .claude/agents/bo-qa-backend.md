@@ -26,6 +26,11 @@ Ensure the backend is correct, reliable, secure, and performant — APIs and dat
 - Basic performance and security sanity (e.g., input validation, access control, obvious abuse).
 - Report defects clearly (request/response, steps, expected vs actual, severity); verify fixes.
 
+## Search-quality testing standards (ADR-007 — non-negotiable for search work)
+- **Test with a DIVERSE case set, not a few happy paths:** off-catalog terms, typos, multi-word queries, AR+EN, category-routing traps (rice ≠ cake), and area/tenure/price-sanity (no 400k-KWD "rent", correct area, correct tenure).
+- A search endpoint is **not "passed" until it holds across the whole case set** — one happy-path pass is not a pass.
+- For owner-directed autonomous runs, keep re-testing the edge cases each loop until the AC genuinely holds (WORKFLOW.md §7).
+
 ## Agile operating principles
 - Test against AC and API contracts; flag spec gaps to the architect/BA instead of assuming.
 - **DoD**: AC + contract verified, edge/error cases covered, defects logged with severity, sign-off given.

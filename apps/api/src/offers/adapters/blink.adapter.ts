@@ -137,6 +137,7 @@ function readSuggestProducts(json: unknown): Array<{ handle: string; title?: str
 function blinkAttrs(product: ShopifyProduct, variant: ShopifyVariant): Record<string, string> {
   const attrs: Record<string, string> = { currency: 'KWD' };
   if (product.vendor) attrs.brand = product.vendor;
+  if (product.product_type) attrs.category = product.product_type; // relevance signal
   const opts = [variant.option1, variant.option2].filter(Boolean).join(' ');
   const storage = `${product.title} ${opts}`.match(/(\d+)\s?GB/i);
   if (storage) attrs.storage = `${storage[1]}GB`;

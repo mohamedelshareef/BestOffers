@@ -1,7 +1,14 @@
 import {
   detectOfferArea,
+  detectOfferTenure,
   detectQueryAreas,
+  detectQueryTenure,
   filterFlatsByQuery,
+  filterFlatsByTenure,
+  inferTenureFromPrice,
+  isSaneMonthlyRent,
+  SANE_RENT_MAX_FILS,
+  SANE_RENT_MIN_FILS,
 } from './realestate-relevance';
 import { SocialIngestAdapter } from './social/social-ingest.adapter';
 import { MockSocialExtractor } from './social/mock-social-extractor';
@@ -81,6 +88,103 @@ describe('realestate-relevance — strict area matching (AR + EN aliases)', () =
     it('no recognizable area → keeps provider order (does NOT nuke a free-form query)', () => {
       const out = filterFlatsByQuery(flats, 'cheap furnished apartment');
       expect(out.map((f) => f.area)).toEqual(['Salmiya', 'Salwa', 'Mahboula', 'Jabriya']);
+    });
+  });
+});
+
+/**
+ * OWNER BUG: a RENT flat showed 300,000 KD (a SALE price). Tenure detection + monthly-rent sanity must
+ * (1) detect rent vs sale, (2) keep a rent query free of sale listings (and vice versa), (3) never let an
+ * absurd rent figure (e.g. 300,000) through.
+ */
+describe('realestate-relevance — tenure (rent vs sale) + price sanity', () => {
+  describe('detectQueryTenure', () => {
+    it('sale markers (للبيع / تمليك / for sale)', () => {
+      expect(detectQueryTenure('شقة للبيع في السالمية')).toBe('sale');
+      expect(detectQueryTenure('apartment for sale Salwa')).toBe('sale');
+      expect(detectQueryTenure('شقة تمليك')).toBe('sale');
+    });
+    it('rent markers (للايجار / للإيجار / for rent / monthly)', () => {
+      expect(detectQueryTenure('شقة للايجار السالمية')).toBe('rent');
+      expect(detectQueryTenure('flat for rent')).toBe('rent');
+      expect(detectQueryTenure('apartment 400 KWD monthly')).toBe('rent');
+    });
+    it('null when tenure unspecified', () => {
+      expect(detectQueryTenure('شقة في السالمية غرفتين')).toBeNull();
+    });
+  });
+
+  describe('detectOfferTenure', () => {
+    it('prefers the explicit tenure attr', () => {
+      expect(detectOfferTenure('sale', 'للايجار 400 د.ك')).toBe('sale');
+      expect(detectOfferTenure('rent')).toBe('rent');
+    });
+    it('falls back to caption markers when no attr', () => {
+      expect(detectOfferTenure(undefined, 'للبيع شقة تمليك 300,000 د.ك')).toBe('sale');
+      expect(detectOfferTenure(undefined, 'للايجار 420 د.ك شهرياً')).toBe('rent');
+    });
+  });
+
+  describe('isSaneMonthlyRent / inferTenureFromPrice', () => {
+    it('accepts a realistic monthly rent, rejects an absurd one', () => {
+      expect(isSaneMonthlyRent(420_000)).toBe(true); // 420 KWD/month
+      expect(isSaneMonthlyRent(SANE_RENT_MIN_FILS)).toBe(true);
+      expect(isSaneMonthlyRent(SANE_RENT_MAX_FILS)).toBe(true);
+      expect(isSaneMonthlyRent(30_000)).toBe(false); // 30 KWD — too low
+      expect(isSaneMonthlyRent(300_000_000)).toBe(false); // 300,000 KWD — a SALE price
+    });
+    it('price-on-request (0) is allowed (never an absurd number)', () => {
+      expect(isSaneMonthlyRent(0)).toBe(true);
+    });
+    it('infers SALE from a price at/above the sale floor', () => {
+      expect(inferTenureFromPrice(300_000_000)).toBe('sale'); // 300,000 KWD
+      expect(inferTenureFromPrice(420_000)).toBeNull(); // 420 KWD — could be rent
+    });
+  });
+
+  describe('filterFlatsByTenure', () => {
+    const flats = [
+      { area: 'Salmiya', text: '1BR · Salmiya · For rent', tenure: 'rent', priceFils: 300_000 },
+      { area: 'Salmiya', text: '3BR · Salmiya · For sale', tenure: 'sale', priceFils: 300_000_000 },
+      { area: 'Salwa', text: '4BR · Salwa · For sale', tenure: 'sale', priceFils: 450_000_000 },
+    ];
+
+    it('a RENT query keeps only rent flats — DROPS the sale listings', () => {
+      const out = filterFlatsByTenure(flats, 'rent');
+      expect(out.map((f) => f.tenure)).toEqual(['rent']);
+      expect(out.some((f) => f.priceFils >= 300_000_000)).toBe(false); // no 300k/450k sale price
+    });
+
+    it('a SALE query keeps only sale flats — DROPS the rent listing', () => {
+      const out = filterFlatsByTenure(flats, 'sale');
+      expect(out.every((f) => f.tenure === 'sale')).toBe(true);
+      expect(out.length).toBe(2);
+    });
+
+    it('a RENT-treated flat with an absurd rent figure is DROPPED (never shows 300,000 KD/month)', () => {
+      const bad = [{ area: 'Salmiya', text: 'rent', tenure: 'rent', priceFils: 300_000_000 }];
+      expect(filterFlatsByTenure(bad, 'rent')).toEqual([]);
+    });
+
+    it('a flat with no tenure + a sale-magnitude price is inferred SALE and excluded from a rent query', () => {
+      const unknown = [{ area: 'Salmiya', text: 'شقة 300,000', priceFils: 300_000_000 }];
+      expect(filterFlatsByTenure(unknown, 'rent')).toEqual([]);
+    });
+  });
+
+  describe('filterFlatsByQuery end-to-end (area + tenure + sanity together)', () => {
+    const flats = [
+      { area: 'Salmiya', text: '1BR · Salmiya · For rent', tenure: 'rent', priceFils: 300_000 },
+      { area: 'Salmiya', text: '3BR · Salmiya · For sale', tenure: 'sale', priceFils: 300_000_000 },
+    ];
+    it('rent query for Salmiya excludes the 300,000 KWD Salmiya SALE flat', () => {
+      const out = filterFlatsByQuery(flats, 'شقة للايجار السالمية', { tenure: 'rent' });
+      expect(out.map((f) => f.tenure)).toEqual(['rent']);
+      expect(out.some((f) => f.priceFils === 300_000_000)).toBe(false);
+    });
+    it('sale query for Salmiya keeps the SALE flat, drops the rent flat', () => {
+      const out = filterFlatsByQuery(flats, 'شقة للبيع السالمية', { tenure: 'sale' });
+      expect(out.map((f) => f.tenure)).toEqual(['sale']);
     });
   });
 });

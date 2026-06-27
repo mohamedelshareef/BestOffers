@@ -32,6 +32,9 @@ function flakyClaude(opts: { clarifyAsks: boolean; explainThrows: boolean }): Cl
           : undefined,
       };
     },
+    async clarifierSet() {
+      return []; // no smart set → deterministic config fallback (keeps this resilience test stable)
+    },
     async explainRanking() {
       if (opts.explainThrows) throw new Error('Claude stop_reason=max_tokens — no usable tool output');
       return [];

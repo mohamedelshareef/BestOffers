@@ -76,8 +76,25 @@
 - **LEGAL = biggest flag in project:** scraping IG via 3rd party = against Meta ToS, WE are directing party (higher exposure than portals/Talabat). + caption/image IP (snippet+link only, prefer text-only no thumbnail) + PII in captions (phone/name → privacy wall). Counsel sign-off BEFORE public; build gated. Owner directing not blocking. P3 opt-in = clean long-term answer.
 - **New schema:** `tracked_accounts`, `social_offers`, providers row per social provider (tos_reviewed,enabled). `.env`: SOCIAL_PROVIDER, APIFY_TOKEN, APIFY_IG_ACTOR, SOCIAL_MONTHLY_RESULT_CAP.
 
+## Search quality diagnosis (ADR-007)
+- **VERIFIED root causes (read the code 2026-06-27):**
+  1. **Electronics empties = MOCK_SKUS wall.** `resolveOffers`→`resolveForSkus(matchSkus())`; `matchSkus` filters `MOCK_SKUS` (16 SKUs, ONLY iPhone/Galaxy/MacBook/Dell). Non-catalog term→`[]`→empty. `resolveForSkus` short-circuits `skus.length===0`. Blink (`suggest.json`) + Eureka (Algolia) HAVE real search but lane never reaches them off-catalog, and `LiveOfferResolver.toOffers` drops non-candidate hits (`live-resolver.ts:120`). X-cite = 4-entry hand-list `knownUrls` (no search).
+  2. **Relevance = hand-tables.** food `SYNONYM_GROUPS` ~16 groups; RE `AREA_GROUPS` **12 areas** (vs ~60 real KW). Unseen dish/area→wrong/empty. Each prior bug = new table row (treadmill).
+  3. **RE tenure inferred not asked.** Tenure+rent-sanity guards SHIPPED (`social-ingest.adapter.ts:124-148`, bands 50/3000/10000 KWD) → 400k-rent fixed; but no rent/sale clarifier → null-tenure mixes sale+rent. Area coverage = the live hole.
+  4. Claude intent = only {category,brand,model,constraints}; no per-sector slots (area/tenure/rooms/dish). RE/food run on raw text via `pinIntentToSector`→model, re-parsed by hand-tables.
+- **Fix (ADR-007):** catalog-free electronics discovery (Blink/Eureka search direct + synthesize Sku per hit + pg_trgm group; MOCK_SKUS→test fixture). Full ~60-area KW gazetteer + rent/sale clarifier. Embeddings (pgvector on Supabase) to retire hand-tables for long tail. Coverage telemetry.
+- **Slices (ranked):** Q1 electronics real discovery [HIGHEST] → Q2 X-cite sitemap/search (spike, UNVERIFIED) → Q3 RE gazetteer+tenure clarifier → Q4 embeddings → Q5 coverage/empty-state. Q1-Q3 no new infra/token cost.
+
+## Cron pre-scan into DB — Plan B (ADR-008, SHADOW only, NOT in live search)
+- **Verdict: GO for electronics/Talabat/portals/Claude (~$0 marginal). Apify IG = the ONLY cost trap: ~$20-30/mo if DELTA-built vs ~$300-750/mo if naïve cron re-pulls.** Pure DB-only end state = NO (re-creates ADR-007 catalog-wall long-tail). End-state = **`SEARCH_SOURCE=hybrid`** (DB top-N hit, live fallback for long tail).
+- **VERIFIED in code 2026-06-27:** social lane already built (`offers/adapters/social/*`) & runs **live-per-query** behind OfferCache (`social-resolver.ts:83`). NO BullMQ/cron in api/package.json yet. Search read seam = `this.offers.resolveOffers(intentNormalized)` (`search.service.ts:314`) — that's where the `db|live` toggle binds. Seed = **74 accounts (60 food/13 RE); price mode 24 caption / 45 DM-only / 4 image** → small Claude-vision exposure.
+- **Cost lever = `onlyPostsNewerThan` deltas + `last_pull_at`** → cadence becomes cost-neutral. Cron MUST be delta-based (hard constraint).
+- **Design:** per-sector scan workers REUSE existing `ProviderAdapter` (no adapter changes); new `cached_offers` table + reuse `offer_history`/`tracked_accounts`(+`last_pull_at`); **BullMQ repeatable jobs on existing Redis** (chosen over node-cron/pg_cron); dedup `content_hash` UNIQUE; staleness TTL (elec 60m/food 30m/IG 12h) labelled not hidden; `DbOfferReader` same signature as live, bound by `SEARCH_SOURCE` (default **live**).
+- **Recommended cadence:** elec 30m · Talabat 30m · RE/portals 60m · IG delta 4-6×/day.
+- **Shadow slices (Dev Lead):** S0 BullMQ → S1 cached_offers+dedup → S2 ElectronicsScanWorker (first, $0) → S3 Food/RE workers → S4 IG delta (mock default, monthly cap+kill-switch, prove delta math first) → S5 DbOfferReader+flag+shadow diff vs live (incl ADR-007 long-tail) → S6 hybrid. Flag flips only after S5 + PO sign-off.
+
 ## Key decisions
-- ADR-001 backend stack; ADR-002 Claude integration; ADR-003 live-fetch; ADR-004 accounts/billing/Supabase; **ADR-005 Food data strategy (Talabat JSON API + partnership ingest)**; **ADR-006 Instagram-as-source (Apify/Bright Data API + Claude extract, tier:'social', permalink CTA)**. All in architecture/ files.
+- ADR-001 backend stack; ADR-002 Claude integration; ADR-003 live-fetch; ADR-004 accounts/billing/Supabase; **ADR-005 Food data strategy (Talabat JSON API + partnership ingest)**; **ADR-006 Instagram-as-source (Apify/Bright Data API + Claude extract, tier:'social', permalink CTA)**; **ADR-007 Search quality (catalog-free electronics discovery, KW area gazetteer+tenure clarifier, embeddings matching)**; **ADR-008 Cron pre-scan into DB (Plan B, SHADOW: scan workers + cached_offers + BullMQ + `SEARCH_SOURCE=db|live` default live; GO with delta-Apify; end-state hybrid)**. All in architecture/ files.
 
 ## Open questions / risks / handoffs
 - **ADR-003: live-fetch/republish ToS+IP sign-off → counsel** (owner directing, not blocking). GREEN (X-cite/Blink) lowest-risk lead; T2/T3 behind `tos_reviewed`+kill-switch. (Affiliate model dropped.)

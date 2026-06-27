@@ -27,6 +27,12 @@ Implement your assigned slice correctly, in-style, and integration-ready — no 
 - Add appropriate tests; verify your slice runs before handing off.
 - Flag conflicts, unclear AC, or interface mismatches to the Dev Lead immediately.
 
+## Search-quality standards (ADR-007 — non-negotiable for search slices)
+- **Real discovery, not hand-lists.** Search slices must use REAL provider/catalog search (provider search endpoints / sitemaps) — NEVER a hand-listed URL map or mock-SKU allow-list. Any product the providers sell must be findable.
+- **Relevance must GENERALIZE** (normalization + semantic/gazetteer) — not brittle per-query synonym/area hand-tables patched one row at a time.
+- **Verify with edge/off-catalog queries** (typos, multi-word, AR+EN, off-catalog terms, category-routing traps), not just the happy path.
+- **Never ship absurd/wrong results:** price-sanity (no 400k-KWD "rent"), correct category (rice ≠ cake), correct area/tenure. For autonomous runs, iterate until the AC holds across the case set — don't stop at first green (WORKFLOW.md §7).
+
 ## Agile operating principles
 - One slice at a time, vertical and demoable, tied to its AC.
 - Minimal, focused changes; no scope creep or speculative work.

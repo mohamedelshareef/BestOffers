@@ -1,0 +1,623 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&family=Tajawal:wght@400;500;700;800&display=swap" rel="stylesheet">
+<style>
+  *{box-sizing:border-box}
+  body{margin:0}
+  @keyframes bo-blink{0%,100%{opacity:.25}50%{opacity:1}}
+  @keyframes bo-shimmer{0%{background-position:-200px 0}100%{background-position:400px 0}}
+  .bo-scroll{scrollbar-width:none}
+  .bo-scroll::-webkit-scrollbar{width:0;height:0}
+  .bo-press{transition:transform .12s ease, box-shadow .12s ease}
+  .bo-press:active{transform:scale(.975)}
+</style>
+</helmet>
+<div style="--teal:#0B6B5B;--teal-strong:#075345;--teal-soft:#E3F2EE;--gold:#C8881C;--gold-strong:#A86E0E;--gold-soft:#FBF0D9;--canvas:#FBF8F3;--surface:#FFFFFF;--surface-alt:#F1ECE3;--ink:#18211F;--ink2:#5C6864;--on-gold:#2A1D03;--border:#E6DFD4;--border-strong:#D6CDBE;--success:#1E9E6A;--error:#C8442F;--warning:#B5780A;--teal-grad:linear-gradient(135deg,#0E8C74,#075345);--gold-grad:linear-gradient(135deg,#E0A93B,#C8881C);--disp:'Plus Jakarta Sans','Tajawal',system-ui,sans-serif;--body:'Plus Jakarta Sans','Tajawal',system-ui,sans-serif;min-height:100vh;background:radial-gradient(1200px 700px at 50% -10%, #16352E 0%, #0E1F1B 55%, #0A1714 100%);font-family:var(--body);color:#EAF1EE;padding:34px 24px 60px">
+
+  <!-- ===== TOP CHROME ===== -->
+  <div style="max-width:980px;margin:0 auto 26px">
+    <div style="display:flex;align-items:center;gap:14px;margin-bottom:8px">
+      <div style="width:42px;height:42px;border-radius:12px;background:var(--teal-grad);position:relative;flex:none;box-shadow:0 6px 18px rgba(7,83,69,.45)">
+        <div style="position:absolute;inset:0;display:grid;place-items:center">
+          <div style="position:relative;width:22px;height:22px">
+            <div style="position:absolute;left:9px;top:0;width:4px;height:22px;border-radius:4px;background:#fff"></div>
+            <div style="position:absolute;top:9px;left:0;width:22px;height:4px;border-radius:4px;background:#fff"></div>
+            <div style="position:absolute;left:7px;top:7px;width:8px;height:8px;border-radius:50%;background:var(--gold);box-shadow:0 0 8px rgba(224,169,59,.9)"></div>
+          </div>
+        </div>
+      </div>
+      <div>
+        <div style="font-family:var(--disp);font-weight:700;font-size:21px;letter-spacing:-.2px">BestOffers <span style="color:#9FBDB4;font-weight:500">— Revamp Prototype</span></div>
+        <div style="font-size:13px;color:#8FA9A1">Arabic-first AI offers concierge · Kuwait · teal / gold / sand system</div>
+      </div>
+    </div>
+
+    <div style="display:flex;flex-wrap:wrap;align-items:center;gap:10px;margin-top:18px">
+      <span style="font-size:11px;letter-spacing:1.5px;color:#7C968E;text-transform:uppercase;margin-inline-end:4px">Sector</span>
+      <sc-for list="{{ sectors }}" as="s" hint-placeholder-count="3">
+        <button onClick="{{ s.onClick }}" class="bo-press" style="{{ s.style }}">{{ s.label }}</button>
+      </sc-for>
+      <div style="flex:1"></div>
+      <button onClick="{{ reset }}" class="bo-press" style="border:1px solid rgba(255,255,255,.18);background:rgba(255,255,255,.04);color:#CFE0DA;font-family:var(--body);font-size:13px;font-weight:600;padding:9px 16px;border-radius:999px;cursor:pointer">Reset flow</button>
+    </div>
+
+    <div style="display:flex;flex-wrap:wrap;align-items:center;gap:8px;margin-top:14px">
+      <span style="font-size:11px;letter-spacing:1.5px;color:#7C968E;text-transform:uppercase;margin-inline-end:4px">Flow</span>
+      <sc-for list="{{ steps }}" as="st" hint-placeholder-count="4">
+        <button onClick="{{ st.onClick }}" class="bo-press" style="{{ st.style }}"><span style="opacity:.6;margin-inline-end:7px;font-variant-numeric:tabular-nums">{{ st.num }}</span>{{ st.label }}</button>
+      </sc-for>
+    </div>
+  </div>
+
+  <!-- ===== PHONE STAGE ===== -->
+  <div class="bo-scroll" style="overflow-x:auto;padding-bottom:8px">
+    <div style="display:flex;gap:40px;justify-content:center;min-width:min-content;padding:0 8px">
+      <sc-for list="{{ phones }}" as="ph" hint-placeholder-count="2">
+        <div style="flex:none;display:flex;flex-direction:column;align-items:center;gap:14px">
+          <sc-if value="{{ showLabels }}" hint-placeholder-val="{{ true }}">
+            <div style="display:flex;align-items:center;gap:8px;font-size:12px;color:#9FBDB4;font-weight:600;letter-spacing:.3px">
+              <span style="width:7px;height:7px;border-radius:50%;background:var(--gold)"></span>{{ ph.langLabel }}
+            </div>
+          </sc-if>
+
+          <!-- bezel -->
+          <div style="width:404px;background:#070D0B;border-radius:54px;padding:11px;box-shadow:0 40px 80px -30px rgba(0,0,0,.7), 0 0 0 1px rgba(255,255,255,.05)">
+            <div dir="{{ ph.dir }}" style="width:382px;height:806px;background:var(--canvas);border-radius:44px;overflow:hidden;position:relative;display:flex;flex-direction:column;font-family:var(--body);color:var(--ink)">
+
+              <!-- status bar -->
+              <div style="height:46px;flex:none;display:flex;align-items:center;justify-content:space-between;padding:0 26px;font-family:var(--disp);font-size:14px;font-weight:600;color:var(--ink)">
+                <span style="direction:ltr;unicode-bidi:isolate">9:41</span>
+                <div style="display:flex;align-items:center;gap:6px;opacity:.85">
+                  <svg width="17" height="12" viewBox="0 0 17 12" fill="currentColor"><rect x="0" y="7" width="3" height="5" rx="1"/><rect x="4.5" y="4.5" width="3" height="7.5" rx="1"/><rect x="9" y="2" width="3" height="10" rx="1"/><rect x="13.5" y="0" width="3" height="12" rx="1"/></svg>
+                  <svg width="22" height="12" viewBox="0 0 24 12" fill="none"><rect x="1" y="1" width="19" height="10" rx="3" stroke="currentColor" stroke-width="1.3"/><rect x="3" y="3" width="13" height="6" rx="1.5" fill="currentColor"/><rect x="21" y="4" width="2" height="4" rx="1" fill="currentColor"/></svg>
+                </div>
+              </div>
+
+              <!-- ============ CATEGORIES ============ -->
+              <sc-if value="{{ isCats }}" hint-placeholder-val="{{ true }}">
+                <div style="flex:none;padding:6px 22px 0;display:flex;align-items:center;justify-content:space-between">
+                  <div style="width:40px;height:40px;border-radius:50%;background:var(--teal-grad);color:#fff;display:grid;place-items:center;font-family:var(--disp);font-weight:700;font-size:16px">{{ ph.avatar }}</div>
+                  <button onClick="{{ goSettings }}" class="bo-press" style="width:40px;height:40px;border-radius:50%;border:1px solid var(--border);background:var(--surface);display:grid;place-items:center;cursor:pointer;color:var(--ink)">
+                    <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 9 4.6a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09A1.65 1.65 0 0 0 15 4.6a1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg>
+                  </button>
+                </div>
+                <div class="bo-scroll" style="flex:1;overflow-y:auto;padding:20px 22px 30px">
+                  <div style="font-family:var(--disp);font-size:11px;letter-spacing:2px;color:var(--teal);font-weight:600">BESTOFFERS</div>
+                  <h1 style="font-family:var(--body);font-size:26px;font-weight:700;margin:8px 0 6px;line-height:1.3">{{ ph.greetCat }}</h1>
+                  <div style="display:inline-flex;align-items:center;gap:7px;background:var(--teal-soft);color:var(--teal-strong);font-size:12.5px;font-weight:600;padding:6px 12px;border-radius:999px;margin-bottom:22px">
+                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/></svg>
+                    {{ ph.neutrality }}
+                  </div>
+                  <div style="display:grid;grid-template-columns:1fr 1fr;gap:13px">
+                    <sc-for list="{{ ph.cats }}" as="c" hint-placeholder-count="5">
+                      <button onClick="{{ c.onClick }}" class="bo-press" style="{{ c.style }}">
+                        <div style="{{ c.iconWrap }}">
+                          <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="{{ c.iconPath }}"/></svg>
+                        </div>
+                        <div style="font-family:var(--disp);font-weight:600;font-size:16px;margin-top:13px;color:var(--ink)">{{ c.name }}</div>
+                        <div style="font-size:12px;color:var(--ink2);margin-top:3px">{{ c.sub }}</div>
+                        <sc-if value="{{ c.soon }}" hint-placeholder-val="{{ true }}">
+                          <span style="position:absolute;inset-inline-end:12px;top:12px;background:var(--surface);border:1px dashed var(--border-strong);color:var(--ink2);font-size:10.5px;font-weight:600;padding:3px 9px;border-radius:999px">{{ ph.soon }}</span>
+                        </sc-if>
+                        <sc-if value="{{ c.active }}" hint-placeholder-val="{{ true }}">
+                          <span style="position:absolute;inset-inline-end:14px;bottom:14px;color:var(--teal)">
+                            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" style="{{ ph.flip }}"><path d="m9 18 6-6-6-6"/></svg>
+                          </span>
+                        </sc-if>
+                      </button>
+                    </sc-for>
+                  </div>
+                  <div style="margin-top:18px;background:var(--surface);border:1px solid var(--border);border-radius:16px;padding:16px 18px">
+                    <div style="font-family:var(--disp);font-weight:600;font-size:14px;color:var(--ink)">{{ ph.roadmapT }}</div>
+                    <div style="font-size:13px;color:var(--ink2);margin-top:5px;line-height:1.6">{{ ph.roadmapB }}</div>
+                  </div>
+                </div>
+              </sc-if>
+
+              <!-- ============ SEARCH / INTENT ============ -->
+              <sc-if value="{{ isSearch }}" hint-placeholder-val="{{ true }}">
+                <div style="flex:none;padding:6px 20px 0;display:flex;align-items:center;justify-content:space-between;gap:10px">
+                  <button onClick="{{ goCats }}" class="bo-press" style="width:40px;height:40px;border-radius:50%;border:1px solid var(--border);background:var(--surface);display:grid;place-items:center;cursor:pointer;color:var(--ink)">
+                    <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" style="{{ ph.flip }}"><path d="m15 18-6-6 6-6"/></svg>
+                  </button>
+                  <div style="flex:1;display:flex;justify-content:center">
+                    <div style="display:inline-flex;align-items:center;gap:7px;background:var(--surface);border:1px solid var(--border);color:var(--ink2);font-size:12.5px;font-weight:600;padding:8px 14px;border-radius:999px">
+                      <span style="width:7px;height:7px;border-radius:50%;background:var(--teal)"></span>{{ ph.quota }}
+                    </div>
+                  </div>
+                  <button onClick="{{ goSettings }}" class="bo-press" style="width:40px;height:40px;border-radius:50%;border:1px solid var(--border);background:var(--surface);display:grid;place-items:center;cursor:pointer;color:var(--ink)">
+                    <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 9 4.6a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09A1.65 1.65 0 0 0 15 4.6a1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg>
+                  </button>
+                </div>
+                <div class="bo-scroll" style="flex:1;overflow-y:auto;padding:22px 22px 30px">
+                  <div style="font-family:var(--disp);font-size:11px;letter-spacing:2px;color:var(--teal);font-weight:600">{{ ph.sEyebrow }}</div>
+                  <h1 style="font-family:var(--body);font-size:25px;font-weight:700;margin:8px 0 20px;line-height:1.35">{{ ph.sGreet }}</h1>
+                  <div style="background:var(--surface);border:1px solid var(--border);border-radius:18px;padding:16px 16px;box-shadow:0 10px 30px -18px rgba(11,107,91,.35)">
+                    <div style="display:flex;align-items:flex-start;gap:12px">
+                      <span style="color:var(--teal);margin-top:1px"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="7"/><path d="m21 21-4.3-4.3"/></svg></span>
+                      <div style="flex:1;font-size:16px;color:var(--ink);line-height:1.5;padding-top:1px">{{ ph.sPlaceholder }}<span style="display:inline-block;width:2px;height:18px;background:var(--teal);margin-inline-start:2px;vertical-align:middle;animation:bo-blink 1.1s infinite"></span></div>
+                      <span style="color:var(--teal-strong);background:var(--teal-soft);width:34px;height:34px;border-radius:50%;display:grid;place-items:center;flex:none"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 2a3 3 0 0 0-3 3v7a3 3 0 0 0 6 0V5a3 3 0 0 0-3-3z"/><path d="M19 10v2a7 7 0 0 1-14 0v-2M12 19v3"/></svg></span>
+                    </div>
+                  </div>
+                  <div style="display:flex;align-items:center;gap:7px;color:var(--ink2);font-size:12.5px;margin-top:12px">
+                    <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="var(--success)" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6 9 17l-5-5"/></svg>
+                    {{ ph.trust }}
+                  </div>
+                  <button onClick="{{ goClarify }}" class="bo-press" style="width:100%;margin-top:20px;height:54px;border:none;border-radius:14px;background:var(--teal-grad);color:#fff;font-family:var(--disp);font-weight:600;font-size:16px;cursor:pointer;display:flex;align-items:center;justify-content:center;gap:10px;box-shadow:0 14px 28px -12px rgba(7,83,69,.6)">
+                    {{ ph.cta }}<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" style="{{ ph.flip }}"><path d="M5 12h14M13 6l6 6-6 6"/></svg>
+                  </button>
+                  <div style="font-size:11px;letter-spacing:1.5px;color:var(--ink2);text-transform:uppercase;font-weight:600;margin:28px 0 12px">{{ ph.recentT }}</div>
+                  <sc-for list="{{ ph.recents }}" as="r" hint-placeholder-count="2">
+                    <div onClick="{{ goClarify }}" class="bo-press" style="display:flex;align-items:center;gap:12px;padding:13px 14px;background:var(--surface);border:1px solid var(--border);border-radius:14px;margin-bottom:10px;cursor:pointer">
+                      <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="var(--ink2)" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/></svg>
+                      <span style="font-size:15px;color:var(--ink)">{{ r }}</span>
+                    </div>
+                  </sc-for>
+                </div>
+              </sc-if>
+
+              <!-- ============ CLARIFIER ============ -->
+              <sc-if value="{{ isClarify }}" hint-placeholder-val="{{ true }}">
+                <div style="flex:none;padding:6px 20px 14px;display:flex;align-items:center;justify-content:space-between;gap:10px;border-bottom:1px solid var(--border)">
+                  <button onClick="{{ goSearch }}" class="bo-press" style="width:40px;height:40px;border-radius:50%;border:1px solid var(--border);background:var(--surface);display:grid;place-items:center;cursor:pointer;color:var(--ink)">
+                    <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" style="{{ ph.flip }}"><path d="m15 18-6-6 6-6"/></svg>
+                  </button>
+                  <div style="text-align:center">
+                    <div style="font-family:var(--disp);font-weight:600;font-size:16px">{{ ph.clarTitle }}</div>
+                    <div style="font-size:12px;color:var(--ink2);margin-top:2px;font-variant-numeric:tabular-nums;direction:ltr;unicode-bidi:isolate">{{ ph.progressText }}</div>
+                  </div>
+                  <div style="width:40px"></div>
+                </div>
+                <div style="flex:none;height:4px;background:var(--surface-alt)"><div style="height:100%;background:var(--teal-grad);border-radius:0 999px 999px 0;{{ ph.progressFill }}"></div></div>
+                <div class="bo-scroll" style="flex:1;overflow-y:auto;padding:20px 20px 24px;display:flex;flex-direction:column;gap:14px">
+                  <sc-for list="{{ ph.convo }}" as="m" hint-placeholder-count="3">
+                    <sc-if value="{{ m.isAI }}" hint-placeholder-val="{{ true }}">
+                      <div style="align-self:flex-start;max-width:80%;background:var(--surface);border:1px solid var(--border);border-radius:18px;border-start-start-radius:6px;padding:13px 16px;font-size:15px;line-height:1.5;color:var(--ink);box-shadow:0 6px 16px -12px rgba(0,0,0,.3)">{{ m.text }}</div>
+                    </sc-if>
+                    <sc-if value="{{ m.isUser }}" hint-placeholder-val="{{ true }}">
+                      <div style="align-self:flex-end;max-width:80%;background:var(--teal);color:#fff;border-radius:18px;border-end-end-radius:6px;padding:11px 16px;font-size:15px;line-height:1.5">{{ m.text }}</div>
+                    </sc-if>
+                    <sc-if value="{{ m.hasChips }}" hint-placeholder-val="{{ true }}">
+                      <div style="display:flex;flex-wrap:wrap;gap:9px;margin-top:2px">
+                        <sc-for list="{{ m.chips }}" as="ch" hint-placeholder-count="4">
+                          <button onClick="{{ ch.onClick }}" class="bo-press" style="{{ ch.style }}">{{ ch.label }}</button>
+                        </sc-for>
+                      </div>
+                    </sc-if>
+                  </sc-for>
+                </div>
+                <div style="flex:none;padding:12px 18px 18px;border-top:1px solid var(--border);background:var(--canvas)">
+                  <div style="display:flex;align-items:center;gap:10px;background:var(--surface);border:1px solid var(--border);border-radius:14px;padding:11px 14px">
+                    <span style="flex:1;color:var(--ink2);font-size:14px">{{ ph.composerPh }}</span>
+                    <button onClick="{{ answerCurrent }}" class="bo-press" style="width:34px;height:34px;border-radius:50%;border:none;background:var(--teal-grad);color:#fff;display:grid;place-items:center;cursor:pointer">
+                      <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.3" stroke-linecap="round" stroke-linejoin="round" style="{{ ph.flip }}"><path d="M5 12h14M13 6l6 6-6 6"/></svg>
+                    </button>
+                  </div>
+                </div>
+              </sc-if>
+
+              <!-- ============ RESULTS ============ -->
+              <sc-if value="{{ isResults }}" hint-placeholder-val="{{ true }}">
+                <div style="flex:none;padding:6px 20px 14px;display:flex;align-items:center;justify-content:space-between;gap:10px;border-bottom:1px solid var(--border)">
+                  <button onClick="{{ goSearch }}" class="bo-press" style="width:40px;height:40px;border-radius:50%;border:1px solid var(--border);background:var(--surface);display:grid;place-items:center;cursor:pointer;color:var(--ink)">
+                    <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" style="{{ ph.flip }}"><path d="m15 18-6-6 6-6"/></svg>
+                  </button>
+                  <div style="flex:1;text-align:center;overflow:hidden">
+                    <div style="font-family:var(--disp);font-weight:600;font-size:15px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">{{ ph.rQuery }}</div>
+                    <div style="font-size:12px;color:var(--ink2);margin-top:2px">{{ ph.rCountText }}</div>
+                  </div>
+                  <button onClick="{{ goSearch }}" class="bo-press" style="width:40px;height:40px;border-radius:50%;border:1px solid var(--border);background:var(--surface);display:grid;place-items:center;cursor:pointer;color:var(--teal)">
+                    <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 5v14M5 12h14"/></svg>
+                  </button>
+                </div>
+                <div class="bo-scroll" style="flex:1;overflow-y:auto;padding:18px 20px 26px">
+                  <sc-for list="{{ ph.cards }}" as="cd" hint-placeholder-count="3">
+                    <div style="{{ cd.wrap }}">
+                      <sc-if value="{{ cd.verdict }}" hint-placeholder-val="{{ true }}">
+                        <div style="background:var(--gold-grad);padding:11px 16px;display:flex;align-items:center;gap:10px;color:var(--on-gold)">
+                          <span style="width:24px;height:24px;border-radius:50%;background:rgba(42,29,3,.16);display:grid;place-items:center;flex:none"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6 9 17l-5-5"/></svg></span>
+                          <div style="line-height:1.25"><div style="font-family:var(--disp);font-weight:700;font-size:13.5px">{{ cd.verdictLabel }}</div><div style="font-size:12px;font-weight:500;opacity:.9">{{ cd.verdictReason }}</div></div>
+                        </div>
+                      </sc-if>
+                      <div style="padding:14px;display:flex;gap:13px;align-items:flex-start">
+                        <div style="width:80px;height:80px;border-radius:12px;background:var(--surface-alt);flex:none;display:grid;place-items:center;color:var(--border-strong);position:relative;overflow:hidden">
+                          <svg width="34" height="34" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="{{ cd.iconPath }}"/></svg>
+                          <sc-if value="{{ cd.rank }}" hint-placeholder-val="{{ true }}">
+                            <span style="position:absolute;inset-inline-start:6px;top:6px;background:var(--ink);color:#fff;width:20px;height:20px;border-radius:50%;display:grid;place-items:center;font-family:var(--disp);font-size:11px;font-weight:700;direction:ltr">{{ cd.rank }}</span>
+                          </sc-if>
+                        </div>
+                        <div style="flex:1;min-width:0">
+                          <div style="font-family:var(--disp);font-weight:600;font-size:15.5px;color:var(--ink);line-height:1.3">{{ cd.name }}</div>
+                          <sc-if value="{{ cd.why }}" hint-placeholder-val="{{ true }}">
+                            <span style="display:inline-block;margin-top:7px;background:var(--teal-soft);color:var(--teal-strong);font-size:11.5px;font-weight:600;padding:4px 10px;border-radius:999px">{{ cd.why }}</span>
+                          </sc-if>
+                          <div style="display:flex;align-items:center;gap:6px;margin-top:8px;color:var(--ink2);font-size:13px">
+                            <sc-if value="{{ cd.isIG }}" hint-placeholder-val="{{ true }}">
+                              <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="2" width="20" height="20" rx="5.5"/><circle cx="12" cy="12" r="4"/><circle cx="17.5" cy="6.5" r="1" fill="currentColor" stroke="none"/></svg>
+                            </sc-if>
+                            <span style="direction:ltr;unicode-bidi:isolate;font-weight:500">{{ cd.provider }}</span>
+                          </div>
+                          <sc-if value="{{ cd.recency }}" hint-placeholder-val="{{ true }}">
+                            <span style="display:inline-block;margin-top:7px;background:var(--surface-alt);color:var(--ink2);font-size:11px;font-weight:600;padding:3px 9px;border-radius:999px">{{ cd.recency }}</span>
+                          </sc-if>
+                        </div>
+                        <div style="flex:none;text-align:end;display:flex;flex-direction:column;align-items:flex-end;justify-content:space-between;align-self:stretch">
+                          <sc-if value="{{ cd.priceOnRequest }}" hint-placeholder-val="{{ true }}">
+                            <span style="font-size:12px;color:var(--ink2);font-weight:600;max-width:96px;line-height:1.4;text-align:end">{{ cd.priceLabel }}</span>
+                          </sc-if>
+                          <sc-if value="{{ cd.hasPrice }}" hint-placeholder-val="{{ true }}">
+                            <div style="white-space:nowrap"><span style="font-family:var(--disp);font-weight:800;font-size:19px;color:var(--gold);direction:ltr;unicode-bidi:isolate">{{ cd.price }}</span> <span style="font-size:12px;color:var(--ink2);font-weight:600">{{ cd.cur }}</span></div>
+                          </sc-if>
+                          <span style="color:var(--ink2);margin-top:10px"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" style="{{ ph.flip }}"><path d="m9 18 6-6-6-6"/></svg></span>
+                        </div>
+                      </div>
+                      <sc-if value="{{ cd.isIG }}" hint-placeholder-val="{{ true }}">
+                        <div style="padding:0 14px 14px"><button class="bo-press" style="width:100%;display:flex;align-items:center;justify-content:center;gap:8px;background:var(--teal-soft);color:var(--teal-strong);border:none;border-radius:11px;padding:10px;font-family:var(--body);font-weight:600;font-size:13.5px;cursor:pointer">
+                          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="2" width="20" height="20" rx="5.5"/><circle cx="12" cy="12" r="4"/><circle cx="17.5" cy="6.5" r="1" fill="currentColor" stroke="none"/></svg>
+                          {{ ph.igCta }}
+                        </button></div>
+                      </sc-if>
+                    </div>
+                  </sc-for>
+                  <div style="display:flex;align-items:center;justify-content:center;gap:7px;margin-top:8px;color:var(--ink2);font-size:11.5px;text-align:center">
+                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="var(--success)" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/></svg>
+                    {{ ph.neutralFoot }}
+                  </div>
+                </div>
+              </sc-if>
+
+              <!-- ============ SETTINGS ============ -->
+              <sc-if value="{{ isSettings }}" hint-placeholder-val="{{ true }}">
+                <div style="flex:none;padding:6px 20px 14px;display:flex;align-items:center;justify-content:space-between;gap:10px;border-bottom:1px solid var(--border)">
+                  <button onClick="{{ backSettings }}" class="bo-press" style="width:40px;height:40px;border-radius:50%;border:1px solid var(--border);background:var(--surface);display:grid;place-items:center;cursor:pointer;color:var(--ink)">
+                    <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" style="{{ ph.flip }}"><path d="m15 18-6-6 6-6"/></svg>
+                  </button>
+                  <div style="font-family:var(--disp);font-weight:600;font-size:16px">{{ ph.setTitle }}</div>
+                  <div style="width:40px"></div>
+                </div>
+                <div class="bo-scroll" style="flex:1;overflow-y:auto;padding:22px 22px 30px">
+                  <div style="display:flex;align-items:center;gap:14px;background:var(--surface);border:1px solid var(--border);border-radius:18px;padding:18px;box-shadow:0 10px 26px -20px rgba(0,0,0,.3)">
+                    <div style="width:62px;height:62px;border-radius:50%;background:var(--teal-grad);color:#fff;display:grid;place-items:center;font-family:var(--disp);font-weight:700;font-size:24px;flex:none">{{ ph.avatar }}</div>
+                    <div style="flex:1;min-width:0">
+                      <div style="display:flex;align-items:center;gap:8px"><span style="font-family:var(--disp);font-weight:600;font-size:18px">{{ ph.profName }}</span><span style="background:var(--gold-soft);color:var(--gold-strong);font-size:11px;font-weight:700;padding:2px 9px;border-radius:999px">{{ ph.proTag }}</span></div>
+                      <div style="font-size:13.5px;color:var(--ink2);margin-top:3px;direction:ltr;unicode-bidi:isolate;text-align:start">{{ ph.profEmail }}</div>
+                    </div>
+                  </div>
+                  <sc-for list="{{ ph.setSections }}" as="sec" hint-placeholder-count="2">
+                    <div style="font-size:11px;letter-spacing:1.5px;color:var(--ink2);text-transform:uppercase;font-weight:600;margin:24px 4px 10px">{{ sec.title }}</div>
+                    <div style="background:var(--surface);border:1px solid var(--border);border-radius:16px;overflow:hidden">
+                      <sc-for list="{{ sec.rows }}" as="row" hint-placeholder-count="3">
+                        <div style="display:flex;align-items:center;gap:13px;padding:14px 16px;border-bottom:1px solid var(--border)">
+                          <span style="width:34px;height:34px;border-radius:10px;background:var(--teal-soft);color:var(--teal);display:grid;place-items:center;flex:none"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="{{ row.iconPath }}"/></svg></span>
+                          <span style="flex:1;font-size:15px;color:var(--ink);font-weight:500">{{ row.label }}</span>
+                          <sc-if value="{{ row.isNav }}" hint-placeholder-val="{{ true }}">
+                            <span style="font-size:13.5px;color:var(--ink2);direction:ltr;unicode-bidi:isolate;text-align:end">{{ row.value }}</span>
+                            <span style="color:var(--ink2)"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" style="{{ ph.flip }}"><path d="m9 18 6-6-6-6"/></svg></span>
+                          </sc-if>
+                          <sc-if value="{{ row.toggle }}" hint-placeholder-val="{{ true }}">
+                            <span style="{{ row.track }}"><span style="{{ row.knob }}"></span></span>
+                          </sc-if>
+                        </div>
+                      </sc-for>
+                    </div>
+                  </sc-for>
+                  <button class="bo-press" style="width:100%;margin-top:22px;display:flex;align-items:center;justify-content:center;gap:9px;background:var(--surface);border:1px solid var(--border);color:var(--error);border-radius:14px;padding:15px;font-family:var(--body);font-weight:600;font-size:15px;cursor:pointer">
+                    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="{{ ph.flip }}"><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4M16 17l5-5-5-5M21 12H9"/></svg>
+                    {{ ph.signout }}
+                  </button>
+                </div>
+              </sc-if>
+
+              <!-- home indicator -->
+              <div style="flex:none;height:26px;display:grid;place-items:center"><div style="width:128px;height:5px;border-radius:999px;background:var(--ink);opacity:.22"></div></div>
+            </div>
+          </div>
+        </div>
+      </sc-for>
+    </div>
+  </div>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props="{&quot;$preview&quot;:{&quot;width&quot;:1000,&quot;height&quot;:980},&quot;viewMode&quot;:{&quot;editor&quot;:&quot;enum&quot;,&quot;options&quot;:[&quot;both&quot;,&quot;ar&quot;,&quot;en&quot;],&quot;default&quot;:&quot;both&quot;,&quot;tsType&quot;:&quot;'both'|'ar'|'en'&quot;,&quot;section&quot;:&quot;Prototype&quot;},&quot;showLabels&quot;:{&quot;editor&quot;:&quot;boolean&quot;,&quot;default&quot;:true,&quot;tsType&quot;:&quot;boolean&quot;,&quot;section&quot;:&quot;Prototype&quot;},&quot;showStepNav&quot;:{&quot;editor&quot;:&quot;boolean&quot;,&quot;default&quot;:true,&quot;tsType&quot;:&quot;boolean&quot;,&quot;section&quot;:&quot;Prototype&quot;}}">
+class Component extends DCLogic {
+  state = { screen: 'cats', sector: 'electronics', clarifyStep: 0, answers: [] };
+
+  selectCat(sector, active) { if (!active) return; this.setState({ sector, screen: 'search', clarifyStep: 0, answers: [] }); }
+  switchSector(sector) { this.setState({ sector }); }
+  goCats() { this.setState({ screen: 'cats' }); }
+  goSettings() { this.setState({ prevScreen: this.state.screen, screen: 'settings' }); }
+  backSettings() { this.setState({ screen: this.state.prevScreen || 'cats' }); }
+  goSearch() { this.setState({ screen: 'search' }); }
+  goClarify() { this.setState({ screen: 'clarify', clarifyStep: 0, answers: [] }); }
+  answer(i, ci) {
+    const a = this.state.answers.slice(); a[i] = ci;
+    const next = i + 1;
+    if (next >= 5) this.setState({ answers: a, screen: 'results' });
+    else this.setState({ answers: a, clarifyStep: next });
+  }
+  jump(screen) {
+    if (screen === 'clarify') this.setState({ screen, clarifyStep: 2, answers: [0, 1] });
+    else this.setState({ screen, clarifyStep: 0, answers: [] });
+  }
+  reset() { this.setState({ screen: 'cats', sector: 'electronics', clarifyStep: 0, answers: [] }); }
+
+  renderVals() {
+    const { screen, sector, clarifyStep, answers } = this.state;
+    const viewMode = this.props.viewMode ?? 'both';
+    const showLabels = this.props.showLabels ?? true;
+    const showStepNav = this.props.showStepNav ?? true;
+
+    const ICON = {
+      phone: 'M5 4a2 2 0 0 1 2-2h10a2 2 0 0 1 2 2v16a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2zM11 18h2',
+      food: 'M3 2v7a2 2 0 0 0 2 2 2 2 0 0 0 2-2V2M5 2v20M17 2c-1.7 0-3 2-3 5v6h3M17 2v20',
+      home: 'M3 10.5 12 3l9 7.5M5 9v11h14V9',
+      sofa: 'M4 11V8a2 2 0 0 1 2-2h12a2 2 0 0 1 2 2v3M3 13a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2v5H3zM6 18v2M18 18v2',
+      car: 'M5 13l1.6-4.8A2 2 0 0 1 8.5 7h7a2 2 0 0 1 1.9 1.2L19 13M5 13h14v5H5zM8 18v2M16 18v2',
+      apt: 'M5 21V4a1 1 0 0 1 1-1h8a1 1 0 0 1 1 1v17M15 9h3a1 1 0 0 1 1 1v11M9 7h2M9 11h2M9 15h2',
+      box: 'M21 8 12 3 3 8l9 5 9-5zM3 8v8l9 5 9-5V8',
+      crown: 'M3 17h18M4 7l4 4 4-7 4 7 4-4v10H4z',
+      mail: 'M4 5h16a1 1 0 0 1 1 1v12a1 1 0 0 1-1 1H4a1 1 0 0 1-1-1V6a1 1 0 0 1 1-1zM3 7l9 6 9-6',
+      globe: 'M12 3a9 9 0 1 0 0 18 9 9 0 0 0 0-18zM3 12h18M12 3c2.5 2.6 2.5 15.4 0 18M12 3c-2.5 2.6-2.5 15.4 0 18',
+      lock: 'M6 11h12v9H6zM8 11V8a4 4 0 0 1 8 0v3',
+      bell: 'M18 8a6 6 0 0 0-12 0c0 7-3 9-3 9h18s-3-2-3-9M13.7 21a2 2 0 0 1-3.4 0',
+      logout: 'M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4M16 17l5-5-5-5M21 12H9',
+    };
+
+    const STR = {
+      ar: { langLabel: 'العربية · RTL', dir: 'rtl', flip: 'transform:scaleX(-1)', avatar: 'ر',
+        greetCat: 'شنو تبي تلقّى اليوم؟', neutrality: 'بلا إعلانات مدفوعة · ترتيب محايد', soon: 'قريباً',
+        roadmapT: 'فئات جديدة قادمة', roadmapB: 'نوسّع للأثاث والسيارات قريباً — نفس الذكاء، ونفس الحياد.',
+        catNames: ['الإلكترونيات', 'الطعام', 'العقارات', 'الأثاث', 'السيارات'],
+        catSubs: ['جوّالات · لابتوبات', 'مطاعم · توصيل', 'إيجار · تمليك', 'قريباً', 'قريباً'],
+        trust: 'لا إعلانات · لا عمولات مخفية · فقط أفضل سعر', cta: 'ابحث عن أفضل عرض',
+        recentT: 'عمليات بحث أخيرة', clarTitle: 'نضبط بحثك', composerPh: 'اكتب إجابتك…', igCta: 'شوف على إنستقرام',
+        neutralFoot: 'ترتيب محايد · بلا نتائج مموّلة', anyEnd: 'أي', skipEnd: 'تخطّي',
+        setTitle: 'الإعدادات', profName: 'ريم العنزي', profEmail: 'reem@email.com', proTag: 'Pro',
+        setSections: [
+          { title: 'الحساب', rows: [
+            { icon: 'phone', label: 'رقم الهاتف', value: '+965 •••• 1234' },
+            { icon: 'crown', label: 'الاشتراك', value: 'Pro · يتجدد 12 مايو' },
+            { icon: 'mail', label: 'البريد الإلكتروني', value: 'reem@email.com' } ] },
+          { title: 'التفضيلات', rows: [
+            { icon: 'globe', label: 'اللغة', value: 'العربية' },
+            { icon: 'lock', label: 'الدخول بالبصمة', toggle: true, on: true },
+            { icon: 'bell', label: 'الإشعارات', toggle: true, on: true } ] } ],
+        signout: 'تسجيل الخروج' },
+      en: { langLabel: 'English · LTR', dir: 'ltr', flip: '', avatar: 'R',
+        greetCat: 'What are you after today?', neutrality: 'No paid ads · neutral ranking', soon: 'Soon',
+        roadmapT: 'New categories coming', roadmapB: 'Furniture and cars are next — same intelligence, same neutrality.',
+        catNames: ['Electronics', 'Food', 'Real-estate', 'Furniture', 'Cars'],
+        catSubs: ['Phones · laptops', 'Dining · delivery', 'Rent · buy', 'Soon', 'Soon'],
+        trust: 'No ads · no hidden commissions · just the best price', cta: 'Find the best offer',
+        recentT: 'Recent searches', clarTitle: 'Refining your search', composerPh: 'Type your answer…', igCta: 'View on Instagram',
+        neutralFoot: 'Neutral ranking · no sponsored results', anyEnd: 'Any', skipEnd: 'Skip',
+        setTitle: 'Settings', profName: 'Reem Al-Anzi', profEmail: 'reem@email.com', proTag: 'Pro',
+        setSections: [
+          { title: 'Account', rows: [
+            { icon: 'phone', label: 'Phone number', value: '+965 •••• 1234' },
+            { icon: 'crown', label: 'Subscription', value: 'Pro · renews May 12' },
+            { icon: 'mail', label: 'Email', value: 'reem@email.com' } ] },
+          { title: 'Preferences', rows: [
+            { icon: 'globe', label: 'Language', value: 'English' },
+            { icon: 'lock', label: 'Biometric unlock', toggle: true, on: true },
+            { icon: 'bell', label: 'Notifications', toggle: true, on: true } ] } ],
+        signout: 'Sign out' },
+    };
+
+    const SECTORS = {
+      electronics: {
+        glyph: 'phone',
+        ar: { eyebrow: 'ELECTRONICS · الإلكترونيات', placeholder: 'آيفون 17 Pro Max بأفضل سعر',
+          recents: ['لابتوب gaming بميزانية محدودة', 'سماعة Sony بلوتوث'], query: 'آيفون 17 Pro Max · 512GB', count: '6',
+          questions: [
+            { q: 'كم ميزانيتك التقريبية؟', chips: ['أقل من 250', '250–350', 'أكثر من 350', 'أي'] },
+            { q: 'كم سعة التخزين المطلوبة؟', chips: ['256GB', '512GB', '1TB', 'أي'] },
+            { q: 'أي لون تفضّل؟', chips: ['أسود', 'تيتانيوم', 'أزرق', 'أي'] },
+            { q: 'جديد أو مفتوح الصندوق؟', chips: ['جديد', 'مفتوح', 'أي'] },
+            { q: 'متجر معيّن؟', chips: ['أي متجر', 'Xcite', 'Eureka', 'تخطّي'] } ],
+          verdictLabel: 'أفضل عرض', verdictReason: 'أوفر بـ 18.000 د.ك من المتوسط',
+          cards: [
+            { name: 'آيفون 17 Pro Max 512GB', provider: 'Xcite', why: '512GB أسود — مطابق لطلبك', price: '412.000', cur: 'د.ك', verdict: true },
+            { name: 'آيفون 17 Pro Max 512GB', provider: 'Eureka', price: '419.000', cur: 'د.ك', rank: '2' },
+            { name: 'آيفون 17 Pro Max 512GB', provider: 'Best Al-Yousifi', price: '425.000', cur: 'د.ك', rank: '3' },
+            { name: 'آيفون 17 Pro Max 512GB', provider: 'X-cite — مفتوح', price: '431.000', cur: 'د.ك', rank: '4' } ] },
+        en: { eyebrow: 'ELECTRONICS · الإلكترونيات', placeholder: 'iPhone 17 Pro Max, best price',
+          recents: ['Gaming laptop on a budget', 'Sony bluetooth headphones'], query: 'iPhone 17 Pro Max · 512GB', count: '6',
+          questions: [
+            { q: "What's your approximate budget?", chips: ['Under 250', '250–350', 'Over 350', 'Any'] },
+            { q: 'How much storage do you need?', chips: ['256GB', '512GB', '1TB', 'Any'] },
+            { q: 'Preferred colour?', chips: ['Black', 'Natural', 'Blue', 'Any'] },
+            { q: 'New or open-box?', chips: ['New', 'Open-box', 'Any'] },
+            { q: 'A specific store?', chips: ['Any store', 'Xcite', 'Eureka', 'Skip'] } ],
+          verdictLabel: 'Best offer', verdictReason: '18.000 KWD below average',
+          cards: [
+            { name: 'iPhone 17 Pro Max 512GB', provider: 'Xcite', why: '512GB black — matches your ask', price: '412.000', cur: 'KWD', verdict: true },
+            { name: 'iPhone 17 Pro Max 512GB', provider: 'Eureka', price: '419.000', cur: 'KWD', rank: '2' },
+            { name: 'iPhone 17 Pro Max 512GB', provider: 'Best Al-Yousifi', price: '425.000', cur: 'KWD', rank: '3' },
+            { name: 'iPhone 17 Pro Max 512GB', provider: 'X-cite — open-box', price: '431.000', cur: 'KWD', rank: '4' } ] },
+      },
+      food: {
+        glyph: 'food',
+        ar: { eyebrow: 'FOOD · الطعام', placeholder: 'مشاوي مشكّلة عائلي لأربعة',
+          recents: ['برياني دجاج لعائلة', 'بيتزا عرض اليوم'], query: 'مشاوي مشكّلة · عائلي (4)', count: '5',
+          questions: [
+            { q: 'كم شخص؟', chips: ['2', '4', '6', 'أي'] },
+            { q: 'نوع الطبق؟', chips: ['مشاوي', 'برياني', 'بيتزا', 'أي'] },
+            { q: 'ميزانية الطلب؟', chips: ['أقل من 10', '10–15', 'أكثر من 15', 'أي'] },
+            { q: 'توصيل أو استلام؟', chips: ['توصيل', 'استلام', 'أي'] },
+            { q: 'أي منطقة؟', chips: ['السالمية', 'حولي', 'أي', 'تخطّي'] } ],
+          verdictLabel: 'أفضل عرض', verdictReason: 'أوفر بـ 3.000 د.ك لنفس الكمية',
+          cards: [
+            { name: 'صحن مشاوي مشكّلة — عائلي', provider: '@grill_house_kw', why: 'عائلي لـ 4 — مطابق', price: '12.500', cur: 'د.ك', verdict: true, isIG: true, recency: 'إنستقرام · قبل يومين', iconPath: ICON.food },
+            { name: 'وليمة ساج عائلية', provider: '@saj_alreef', priceOnRequest: true, priceLabel: 'السعر بالخاص — شوف البوست', rank: '2', isIG: true, recency: 'إنستقرام · قبل 5 أيام', iconPath: ICON.food },
+            { name: 'مشاوي مشكّلة (4 أشخاص)', provider: 'Mais Alghanim', price: '14.500', cur: 'د.ك', rank: '3', iconPath: ICON.food } ] },
+        en: { eyebrow: 'FOOD · الطعام', placeholder: 'Mixed grill platter for four',
+          recents: ['Chicken biryani for a family', "Today's pizza offer"], query: 'Mixed grill · family (4)', count: '5',
+          questions: [
+            { q: 'How many people?', chips: ['2', '4', '6', 'Any'] },
+            { q: 'Dish type?', chips: ['Grill', 'Biryani', 'Pizza', 'Any'] },
+            { q: 'Order budget?', chips: ['Under 10', '10–15', 'Over 15', 'Any'] },
+            { q: 'Delivery or pickup?', chips: ['Delivery', 'Pickup', 'Any'] },
+            { q: 'Which area?', chips: ['Salmiya', 'Hawally', 'Any', 'Skip'] } ],
+          verdictLabel: 'Best offer', verdictReason: '3.000 KWD less for the same platter',
+          cards: [
+            { name: 'Mixed grill platter — family', provider: '@grill_house_kw', why: 'Family of 4 — matches', price: '12.500', cur: 'KWD', verdict: true, isIG: true, recency: 'Instagram · 2 days ago', iconPath: ICON.food },
+            { name: 'Family saj feast', provider: '@saj_alreef', priceOnRequest: true, priceLabel: 'Price on request — see post', rank: '2', isIG: true, recency: 'Instagram · 5 days ago', iconPath: ICON.food },
+            { name: 'Mixed grill (serves 4)', provider: 'Mais Alghanim', price: '14.500', cur: 'KWD', rank: '3', iconPath: ICON.food } ] },
+      },
+      realestate: {
+        glyph: 'home',
+        ar: { eyebrow: 'REAL-ESTATE · العقارات', placeholder: 'شقة غرفتين بالسالمية للإيجار',
+          recents: ['شقة استوديو حولي', 'بيت تمليك للعائلة'], query: 'شقة غرفتين · إيجار · السالمية', count: '4',
+          questions: [
+            { q: 'نوع العقار؟', chips: ['شقة', 'بيت', 'أي'] },
+            { q: 'عدد غرف النوم؟', chips: ['1', '2', '3+', 'أي'] },
+            { q: 'إيجار أو تمليك؟', chips: ['إيجار', 'تمليك', 'أي'] },
+            { q: 'الميزانية الشهرية؟', chips: ['أقل من 300', '300–450', 'أكثر من 450', 'أي'] },
+            { q: 'أي منطقة؟', chips: ['السالمية', 'السلام', 'أي', 'تخطّي'] } ],
+          verdictLabel: 'أفضل عرض', verdictReason: 'أقل بـ 40.000 د.ك من متوسط المنطقة',
+          cards: [
+            { name: 'شقة غرفتين — السالمية', provider: '@salmiya_realty', why: 'غرفتين · السالمية — مطابق', price: '320.000', cur: 'د.ك/شهر', verdict: true, isIG: true, recency: 'إنستقرام · قبل 3 أيام', iconPath: ICON.apt },
+            { name: 'شقة غرفتين مفروشة', provider: 'Saned Real Estate', price: '350.000', cur: 'د.ك/شهر', rank: '2', iconPath: ICON.apt },
+            { name: 'شقة عائلية — السالمية', provider: '@kw.aqar', priceOnRequest: true, priceLabel: 'السعر بالخاص — شوف البوست', rank: '3', isIG: true, recency: 'إنستقرام · قبل أسبوع', iconPath: ICON.apt } ] },
+        en: { eyebrow: 'REAL-ESTATE · العقارات', placeholder: '2-bed apartment in Salmiya, rent',
+          recents: ['Studio in Hawally', 'Family home to buy'], query: '2BR rent · Salmiya', count: '4',
+          questions: [
+            { q: 'Property type?', chips: ['Apartment', 'House', 'Any'] },
+            { q: 'Bedrooms?', chips: ['1', '2', '3+', 'Any'] },
+            { q: 'Rent or buy?', chips: ['Rent', 'Buy', 'Any'] },
+            { q: 'Monthly budget?', chips: ['Under 300', '300–450', 'Over 450', 'Any'] },
+            { q: 'Which area?', chips: ['Salmiya', 'Salam', 'Any', 'Skip'] } ],
+          verdictLabel: 'Best offer', verdictReason: '40.000 KWD below the area average',
+          cards: [
+            { name: '2-bed apartment — Salmiya', provider: '@salmiya_realty', why: '2BR · Salmiya — matches', price: '320.000', cur: 'KWD/mo', verdict: true, isIG: true, recency: 'Instagram · 3 days ago', iconPath: ICON.apt },
+            { name: '2-bed furnished apartment', provider: 'Saned Real Estate', price: '350.000', cur: 'KWD/mo', rank: '2', iconPath: ICON.apt },
+            { name: 'Family apartment — Salmiya', provider: '@kw.aqar', priceOnRequest: true, priceLabel: 'Price on request — see post', rank: '3', isIG: true, recency: 'Instagram · 1 week ago', iconPath: ICON.apt } ] },
+      },
+    };
+
+    const sd = SECTORS[sector];
+    const catGlyphs = ['phone', 'food', 'home', 'sofa', 'car'];
+    const catSectors = ['electronics', 'food', 'realestate', null, null];
+    const catActive = [true, true, true, false, false];
+
+    const chipBase = 'font-family:var(--body);font-size:14px;font-weight:600;padding:10px 16px;border-radius:999px;cursor:pointer;background:var(--surface);color:var(--ink);border:1.5px solid var(--border-strong)';
+    const chipSkip = 'font-family:var(--body);font-size:14px;font-weight:600;padding:10px 16px;border-radius:999px;cursor:pointer;background:transparent;color:var(--ink2);border:1.5px dashed var(--border-strong)';
+
+    const buildPhone = (lang) => {
+      const s = STR[lang];
+      const sx = sd[lang];
+      const cats = s.catNames.map((name, idx) => {
+        const active = catActive[idx];
+        const style = active
+          ? 'position:relative;text-align:start;background:var(--surface);border:1px solid var(--border);border-radius:16px;padding:16px 14px 40px;cursor:pointer;box-shadow:0 8px 22px -16px rgba(0,0,0,.35)'
+          : 'position:relative;text-align:start;background:var(--surface-alt);border:1px dashed var(--border-strong);border-radius:16px;padding:16px 14px 40px;cursor:default;opacity:.85';
+        const iconWrap = active
+          ? 'width:44px;height:44px;border-radius:12px;background:var(--teal-soft);color:var(--teal);display:grid;place-items:center'
+          : 'width:44px;height:44px;border-radius:12px;background:var(--surface);color:var(--border-strong);display:grid;place-items:center';
+        return { name, sub: s.catSubs[idx], iconPath: ICON[catGlyphs[idx]], active, soon: !active, style, iconWrap,
+          onClick: () => this.selectCat(catSectors[idx], active) };
+      });
+
+      // clarifier conversation up to current step
+      const convo = [];
+      const qs = sx.questions;
+      for (let i = 0; i <= clarifyStep && i < qs.length; i++) {
+        convo.push({ isAI: true, text: qs[i].q });
+        if (i < clarifyStep) {
+          convo.push({ isUser: true, text: qs[i].chips[answers[i] ?? 0] });
+        } else {
+          convo.push({ hasChips: true, chips: qs[i].chips.map((label, ci) => {
+            const isSkip = label === s.skipEnd;
+            return { label, style: isSkip ? chipSkip : chipBase, onClick: () => this.answer(i, ci) };
+          }) });
+        }
+      }
+      const curNum = Math.min(clarifyStep + 1, 5);
+      const pct = Math.round((Math.min(clarifyStep, 5) / 5) * 100);
+
+      const cards = sx.cards.map((cd) => ({
+        ...cd,
+        verdictLabel: cd.verdict ? sx.verdictLabel : null,
+        verdictReason: cd.verdict ? sx.verdictReason : null,
+        wrap: cd.verdict
+          ? 'background:var(--surface);border:1px solid var(--gold);border-radius:16px;overflow:hidden;margin-bottom:13px;box-shadow:0 18px 40px -22px rgba(200,136,28,.55)'
+          : 'background:var(--surface);border:1px solid var(--border);border-radius:16px;overflow:hidden;margin-bottom:13px;box-shadow:0 8px 22px -18px rgba(0,0,0,.3)',
+        iconPath: cd.iconPath || ICON.box,
+        hasPrice: !cd.priceOnRequest,
+      }));
+
+      return {
+        lang, langLabel: s.langLabel, dir: s.dir, flip: s.flip, avatar: s.avatar,
+        greetCat: s.greetCat, neutrality: s.neutrality, soon: s.soon, roadmapT: s.roadmapT, roadmapB: s.roadmapB, cats,
+        sEyebrow: sx.eyebrow, sGreet: s.greetCat, sPlaceholder: sx.placeholder, trust: s.trust, cta: s.cta,
+        recentT: s.recentT, recents: sx.recents, quota: lang === 'ar' ? '3 عمليات بحث مجانية' : '3 free searches',
+        clarTitle: s.clarTitle, progressText: lang === 'ar' ? (curNum + ' من 5') : (curNum + ' of 5'),
+        progressFill: 'width:' + pct + '%', convo, composerPh: s.composerPh,
+        rQuery: sx.query, rCountText: lang === 'ar' ? ('رتّبنا ' + sx.count + ' عروض حسب أفضل قيمة لك') : ('Ranked ' + sx.count + ' offers by best value'),
+        cards, igCta: s.igCta, neutralFoot: s.neutralFoot,
+        setTitle: s.setTitle, profName: s.profName, profEmail: s.profEmail, proTag: s.proTag,
+        signout: s.signout,
+        setSections: s.setSections.map((sec) => ({
+          title: sec.title,
+          rows: sec.rows.map((r) => ({
+            ...r,
+            iconPath: ICON[r.icon],
+            isNav: !r.toggle,
+            knob: r.on
+              ? 'position:absolute;top:3px;inset-inline-end:3px;width:18px;height:18px;border-radius:50%;background:#fff'
+              : 'position:absolute;top:3px;inset-inline-start:3px;width:18px;height:18px;border-radius:50%;background:#fff',
+            track: r.on
+              ? 'position:relative;width:44px;height:24px;border-radius:999px;background:var(--teal);flex:none'
+              : 'position:relative;width:44px;height:24px;border-radius:999px;background:var(--border-strong);flex:none',
+          })),
+        })),
+      };
+    };
+
+    let phones;
+    if (viewMode === 'ar') phones = [buildPhone('ar')];
+    else if (viewMode === 'en') phones = [buildPhone('en')];
+    else phones = [buildPhone('ar'), buildPhone('en')];
+
+    // sector switcher pills
+    const sectorMeta = [['electronics', 'Electronics'], ['food', 'Food'], ['realestate', 'Real-estate']];
+    const sectors = sectorMeta.map(([id, label]) => ({
+      label, onClick: () => this.switchSector(id),
+      style: (sector === id
+        ? 'background:rgba(224,169,59,.16);border:1px solid rgba(224,169,59,.5);color:#F1D7A0'
+        : 'background:rgba(255,255,255,.04);border:1px solid rgba(255,255,255,.14);color:#BFD2CC') +
+        ';font-family:var(--body);font-size:13px;font-weight:600;padding:9px 16px;border-radius:999px;cursor:pointer',
+    }));
+
+    const stepMeta = [['cats', 'Categories'], ['search', 'Search'], ['clarify', 'Clarifier'], ['results', 'Results']];
+    const steps = stepMeta.map(([id, label], i) => ({
+      label, num: '0' + (i + 1), onClick: () => this.jump(id),
+      style: (screen === id
+        ? 'background:var(--teal-grad);border:1px solid transparent;color:#fff'
+        : 'background:rgba(255,255,255,.04);border:1px solid rgba(255,255,255,.14);color:#BFD2CC') +
+        ';display:inline-flex;align-items:center;font-family:var(--body);font-size:13px;font-weight:600;padding:9px 15px;border-radius:999px;cursor:pointer',
+    }));
+
+    return {
+      phones, sectors, steps: showStepNav ? steps : [], reset: () => this.reset(),
+      showLabels, answerCurrent: () => this.answer(clarifyStep, 0),
+      goCats: () => this.goCats(), goSearch: () => this.goSearch(), goClarify: () => this.goClarify(),
+      goSettings: () => this.goSettings(), backSettings: () => this.backSettings(),
+      isCats: screen === 'cats', isSearch: screen === 'search', isClarify: screen === 'clarify', isResults: screen === 'results', isSettings: screen === 'settings',
+    };
+  }
+}
+</script>
+</body>
+</html>

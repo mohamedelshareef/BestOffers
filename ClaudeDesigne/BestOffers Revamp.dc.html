@@ -1,0 +1,111 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&family=Tajawal:wght@400;500;700;800&display=swap" rel="stylesheet">
+<style>
+  *{box-sizing:border-box}
+  body{margin:0}
+  .bo-card{transition:transform .2s ease, box-shadow .2s ease}
+  .bo-card:hover{transform:translateY(-6px);box-shadow:0 40px 80px -36px rgba(0,0,0,.6)}
+  a{text-decoration:none;color:inherit}
+  @media(max-width:880px){.bo-grid{grid-template-columns:1fr !important}.bo-sys{grid-template-columns:1fr 1fr !important}}
+</style>
+</helmet>
+<div style="--teal:#0B6B5B;--teal-soft:#E3F2EE;--gold:#C8881C;--canvas:#FBF8F3;--surface:#FFFFFF;--ink:#18211F;--ink2:#5C6864;--teal-grad:linear-gradient(135deg,#0E8C74,#075345);--gold-grad:linear-gradient(135deg,#E0A93B,#C8881C);--disp:'Plus Jakarta Sans','Tajawal',system-ui,sans-serif;--body:'Plus Jakarta Sans','Tajawal',system-ui,sans-serif;min-height:100vh;background:radial-gradient(1200px 700px at 50% -10%, #16352E 0%, #0E1F1B 55%, #0A1714 100%);font-family:var(--body);color:#EAF1EE;padding:60px 28px 70px">
+  <div style="max-width:1080px;margin:0 auto">
+
+    <div style="display:flex;align-items:center;gap:14px;margin-bottom:26px">
+      <div style="width:52px;height:52px;border-radius:15px;background:var(--teal-grad);position:relative;flex:none;box-shadow:0 10px 26px rgba(7,83,69,.5)"><div style="position:absolute;inset:0;display:grid;place-items:center"><div style="position:relative;width:28px;height:28px"><div style="position:absolute;left:12px;top:0;width:5px;height:28px;border-radius:5px;background:#fff"></div><div style="position:absolute;top:12px;left:0;width:28px;height:5px;border-radius:5px;background:#fff"></div><div style="position:absolute;left:9px;top:9px;width:10px;height:10px;border-radius:50%;background:var(--gold);box-shadow:0 0 10px rgba(224,169,59,.9)"></div></div></div></div>
+      <div>
+        <div style="font-family:var(--disp);font-weight:700;font-size:15px;letter-spacing:2px;color:#9FBDB4;text-transform:uppercase">BestOffers · Design Revamp</div>
+        <div style="font-size:13px;color:#7C968E">Arabic-first AI offers concierge · Kuwait</div>
+      </div>
+    </div>
+
+    <h1 style="font-family:var(--body);font-weight:700;font-size:clamp(32px,4.4vw,52px);line-height:1.15;margin:0 0 16px;max-width:760px;letter-spacing:-.5px">Ask in your dialect — get the best offer, ranked honestly.</h1>
+    <p style="font-size:17px;line-height:1.7;color:#A9C2BB;max-width:620px;margin:0 0 44px">A premium, neutral, Arabic-first revamp built on the teal / gold / sand system. Three deliverables — explore each below.</p>
+
+    <div class="bo-grid" style="display:grid;grid-template-columns:1.2fr 1fr 1fr;gap:20px">
+      <sc-for list="{{ cards }}" as="c" hint-placeholder-count="3">
+        <a href="{{ c.href }}">
+          <div class="bo-card" style="background:rgba(255,255,255,.04);border:1px solid rgba(255,255,255,.12);border-radius:22px;overflow:hidden;height:100%;display:flex;flex-direction:column;box-shadow:0 26px 60px -40px rgba(0,0,0,.7)">
+            <div style="{{ c.thumb }}">{{ c.thumbIcon }}</div>
+            <div style="padding:22px 22px 24px;flex:1;display:flex;flex-direction:column">
+              <div style="display:inline-flex;align-self:flex-start;align-items:center;gap:6px;background:rgba(224,169,59,.14);color:#F1D7A0;font-size:11px;font-weight:600;letter-spacing:.5px;padding:5px 11px;border-radius:999px;text-transform:uppercase">{{ c.tag }}</div>
+              <h2 style="font-family:var(--disp);font-weight:600;font-size:21px;margin:14px 0 8px">{{ c.title }}</h2>
+              <p style="font-size:14px;line-height:1.6;color:#A9C2BB;margin:0 0 18px;flex:1">{{ c.body }}</p>
+              <span style="display:inline-flex;align-items:center;gap:8px;font-family:var(--disp);font-weight:600;font-size:14px;color:#fff">{{ c.cta }}<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12h14M13 6l6 6-6 6"/></svg></span>
+            </div>
+          </div>
+        </a>
+      </sc-for>
+    </div>
+
+    <!-- system summary -->
+    <div style="margin-top:48px;background:rgba(255,255,255,.03);border:1px solid rgba(255,255,255,.1);border-radius:22px;padding:30px 30px 34px">
+      <div style="font-family:var(--disp);font-size:12px;letter-spacing:2px;color:#9FBDB4;font-weight:600;text-transform:uppercase;margin-bottom:20px">The system</div>
+      <div class="bo-sys" style="display:grid;grid-template-columns:repeat(4,1fr);gap:20px">
+        <sc-for list="{{ system }}" as="s" hint-placeholder-count="4">
+          <div>
+            <div style="display:flex;gap:7px;margin-bottom:12px">
+              <sc-for list="{{ s.swatches }}" as="sw" hint-placeholder-count="3">
+                <span style="{{ sw }}"></span>
+              </sc-for>
+            </div>
+            <div style="font-family:var(--disp);font-weight:600;font-size:15px;color:#fff;margin-bottom:5px">{{ s.title }}</div>
+            <div style="font-size:13px;line-height:1.6;color:#8FA9A1">{{ s.body }}</div>
+          </div>
+        </sc-for>
+      </div>
+      <div style="margin-top:26px;display:flex;flex-wrap:wrap;gap:10px">
+        <sc-for list="{{ principles }}" as="p" hint-placeholder-count="5">
+          <span style="display:inline-flex;align-items:center;gap:7px;background:rgba(255,255,255,.05);border:1px solid rgba(255,255,255,.12);color:#CFE0DA;font-size:12.5px;font-weight:600;padding:7px 13px;border-radius:999px"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="#5FC79E" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6 9 17l-5-5"/></svg>{{ p }}</span>
+        </sc-for>
+      </div>
+    </div>
+
+  </div>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script>
+class Component extends DCLogic {
+  renderVals() {
+    const sparkThumb = 'height:150px;background:var(--teal-grad);display:grid;place-items:center;position:relative;color:#fff;font-family:var(--disp);font-weight:700';
+    const goldThumb = 'height:150px;background:linear-gradient(135deg,#18211F,#0E1F1B);display:grid;place-items:center;position:relative;color:#F1D7A0;font-family:var(--disp);font-weight:700';
+    const sandThumb = 'height:150px;background:linear-gradient(135deg,#FBF8F3,#F1ECE3);display:grid;place-items:center;position:relative;color:var(--teal);font-family:var(--disp);font-weight:700';
+    const swatch = (c) => 'width:22px;height:22px;border-radius:7px;background:' + c + ';border:1px solid rgba(255,255,255,.18)';
+
+    return {
+      cards: [
+        { href: 'BestOffers%20Prototype.dc.html', tag: 'Interactive', title: 'App Prototype', cta: 'Tap through it',
+          body: 'The full spine — Category → Search → Clarifier (5 questions) → Results with the best-price verdict. Arabic & English phones, synced, side by side. Includes the Instagram offer card.',
+          thumb: sparkThumb, thumbIcon: '◆ AR · EN' },
+        { href: 'BestOffers%20Landing.dc.html', tag: 'Marketing', title: 'Landing Page', cta: 'View page',
+          body: 'A premium bilingual web landing page — hero verdict, the three-part deal, how it works, and $1 pricing.',
+          thumb: goldThumb, thumbIcon: 'WEB' },
+        { href: 'BestOffers%20App%20Store.dc.html', tag: 'Store', title: 'App Store Listing', cta: 'View listing',
+          body: 'A store product page with icon, screenshots, and description — AR & EN.',
+          thumb: sandThumb, thumbIcon: 'STORE' },
+      ],
+      system: [
+        { title: 'Teal — trust', body: 'Primary CTAs, active states, the brand voice. AAA on sand.', swatches: [swatch('#0B6B5B'), swatch('#075345'), swatch('#E3F2EE')] },
+        { title: 'Gold — value', body: 'Reserved for price and the verdict ribbon only. A quality signal, never a promo.', swatches: [swatch('#C8881C'), swatch('#E0A93B'), swatch('#FBF0D9')] },
+        { title: 'Sand — canvas', body: 'The warm Gulf background is a brand signal, not white.', swatches: [swatch('#FBF8F3'), swatch('#F1ECE3'), swatch('#FFFFFF')] },
+        { title: 'Type', body: 'Rubik for display & prices · IBM Plex Sans Arabic for body. Western numerals everywhere.', swatches: [swatch('#18211F'), swatch('#5C6864'), swatch('#E6DFD4')] },
+      ],
+      principles: ['Arabic-first / RTL by construction', 'WCAG AA minimum', 'Western numerals · 412.000 KWD', 'Neutral — no sponsored results', 'Truthful prices · no fakes'],
+    };
+  }
+}
+</script>
+</body>
+</html>

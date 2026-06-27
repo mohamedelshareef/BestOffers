@@ -35,6 +35,56 @@ const AREA_GROUPS: Record<string, string[]> = {
 /** "nearby/قريب" markers — a flat explicitly offered as near the asked area is kept (closest-match). */
 const NEARBY_MARKERS = ['nearby', 'near ', 'close to', 'قريب', 'بجانب', 'يبعد', 'مجاور', 'جنب'];
 
+// ── Tenure (rent vs sale) + price-sanity (OWNER BUG: a RENT flat showed 300,000 KD = a SALE price) ──
+
+export type Tenure = 'rent' | 'sale';
+
+/**
+ * Realistic Kuwait monthly-rent band (integer fils). A flat rent below ~50 KWD or above ~3,000 KWD/month
+ * is almost certainly a parse error or a SALE price mislabeled as rent — never shown as a rent figure.
+ */
+export const SANE_RENT_MIN_FILS = 50_000; //   50 KWD / month
+export const SANE_RENT_MAX_FILS = 3_000_000; // 3,000 KWD / month
+
+/** A priced rent above this is treated as a SALE price (sale flats in KW start well above this). */
+export const SALE_PRICE_FLOOR_FILS = 10_000_000; // 10,000 KWD
+
+const SALE_MARKERS = ['للبيع', 'تمليك', 'for sale', 'freehold'];
+const RENT_MARKERS = ['للإيجار', 'للايجار', 'for rent', 'شهري', 'شهريا', 'monthly', '/month', 'per month'];
+
+/** What tenure does the QUERY ask for? sale markers win, else rent markers, else null (unspecified). */
+export function detectQueryTenure(query: string): Tenure | null {
+  const lc = (query || '').toLowerCase();
+  if (SALE_MARKERS.some((m) => lc.includes(m.toLowerCase()))) return 'sale';
+  if (RENT_MARKERS.some((m) => lc.includes(m.toLowerCase()))) return 'rent';
+  return null;
+}
+
+/** What tenure is THIS flat? Prefer an explicit extracted tenure attr, else infer from caption markers. */
+export function detectOfferTenure(tenureAttr?: string, captionText?: string): Tenure | null {
+  if (tenureAttr === 'rent' || tenureAttr === 'sale') return tenureAttr;
+  return detectQueryTenure(captionText || '');
+}
+
+/**
+ * Is this a sane MONTHLY-RENT figure (fils)? 0 = price-on-request is allowed (we show "DM"); a positive
+ * value must sit inside the realistic band. An out-of-band positive rent is a parse error / sale price.
+ */
+export function isSaneMonthlyRent(priceFils: number): boolean {
+  if (priceFils === 0) return true; // price-on-request — handled elsewhere, never an absurd number
+  return priceFils >= SANE_RENT_MIN_FILS && priceFils <= SANE_RENT_MAX_FILS;
+}
+
+/**
+ * Infer tenure from a price magnitude when the caption/extractor didn't state it: a priced listing at or
+ * above the sale floor (e.g. 300,000 KWD) is a SALE, not a monthly rent. Returns null below the floor
+ * (could be either — don't guess rent vs sale from a small number alone).
+ */
+export function inferTenureFromPrice(priceFils: number): Tenure | null {
+  if (priceFils >= SALE_PRICE_FLOOR_FILS) return 'sale';
+  return null;
+}
+
 /** Normalize for matching: lowercase, strip Arabic diacritics/tatweel, unify alef/ya/ta-marbuta. */
 export function normalizeAreaText(s: string): string {
   return (s || '')
@@ -83,6 +133,43 @@ export interface FlatCandidate {
   area?: string;
   /** Optional fuller text (caption / title) to scan for a nearby tag. */
   text?: string;
+  /** Explicit tenure if the adapter resolved one ('rent' | 'sale'); else inferred from text/price. */
+  tenure?: string;
+  /** Listed price in integer fils (0 = price-on-request). Used for tenure inference + rent sanity. */
+  priceFils?: number;
+}
+
+export interface FlatFilterOptions {
+  /** The tenure the USER asked for. When set, only flats of that tenure are kept. */
+  tenure?: Tenure | null;
+}
+
+/**
+ * Tenure + price-sanity gate (OWNER BUG fix). Returns the flats that match the asked tenure and carry a
+ * sane price:
+ *  - The flat's effective tenure = explicit attr → caption marker → price-magnitude inference.
+ *  - If a tenure is asked and the flat's tenure is KNOWN and DIFFERENT → DROP (rent query never shows a
+ *    sale listing, and vice versa). An unknown-tenure flat is kept (we don't drop on absence).
+ *  - For a flat treated as RENT, the price must be a sane monthly figure; an absurd rent (e.g. 300,000)
+ *    is DROPPED (better an honest omission than a fake rent). A sale-priced flat is never shown as rent.
+ */
+export function filterFlatsByTenure<T extends FlatCandidate>(items: T[], asked?: Tenure | null): T[] {
+  const out: T[] = [];
+  for (const item of items) {
+    const price = item.priceFils ?? 0;
+    let tenure = detectOfferTenure(item.tenure, item.text);
+    if (!tenure) tenure = inferTenureFromPrice(price); // 300,000 KWD with no marker → sale
+
+    if (asked && tenure && tenure !== asked) continue; // wrong tenure → drop
+
+    // Rent sanity: a flat presented as rent (asked rent, or its own tenure is rent) must have a sane
+    // monthly price. Drop an absurd rent figure outright (never render "300,000 KD/month").
+    const treatAsRent = asked === 'rent' || tenure === 'rent';
+    if (treatAsRent && price > 0 && !isSaneMonthlyRent(price)) continue;
+
+    out.push(item);
+  }
+  return out;
 }
 
 /**
@@ -94,7 +181,16 @@ export interface FlatCandidate {
  *    "no flats in <area>" than random off-area flats).
  * Never invents; only filters/reorders REAL discovered flats.
  */
-export function filterFlatsByQuery<T extends FlatCandidate>(items: T[], query: string): T[] {
+export function filterFlatsByQuery<T extends FlatCandidate>(
+  items: T[],
+  query: string,
+  opts: FlatFilterOptions = {},
+): T[] {
+  // TENURE + PRICE-SANITY first (OWNER BUG): a rent query must never surface a sale listing or an absurd
+  // rent figure. The asked tenure = explicit option (the rent/buy clarifier) ?? what the query text says.
+  const askedTenure = opts.tenure ?? detectQueryTenure(query);
+  items = filterFlatsByTenure(items, askedTenure);
+
   const askedAreas = detectQueryAreas(query);
   if (askedAreas.size === 0) return items; // no area constraint → don't nuke free-form RE queries
 

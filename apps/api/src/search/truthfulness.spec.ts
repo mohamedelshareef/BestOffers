@@ -68,6 +68,7 @@ class InventingClient implements ClaudeClient {
   // mimics the real clarifier so the flow reaches search
   private mock = new MockClaudeClient();
   clarify = this.mock.clarify.bind(this.mock);
+  clarifierSet = this.mock.clarifierSet.bind(this.mock);
   async explainRanking(): Promise<RankExplanation[]> {
     // returns a fabricated attribute for EVERY offer
     return MOCK_OFFERS.map((o) => ({

@@ -156,6 +156,7 @@ function isLikelyProduct(hit: EurekaHit): boolean {
 function eurekaAttrs(hit: EurekaHit): Record<string, string> {
   const attrs: Record<string, string> = { currency: 'KWD' };
   if (hit.bn) attrs.brand = hit.bn;
+  if (hit.cn) attrs.category = hit.cn; // category PATH (e.g. "…> Laptops > Note Books") — relevance signal
   const name = hit.itmn ?? '';
   const storage = name.match(/(\d+)\s?(GB|TB)\b/i);
   if (storage) attrs.storage = `${storage[1]}${storage[2].toUpperCase()}`;

@@ -2,7 +2,29 @@
 
 > READ at task start. UPDATE at end with durable facts only. Keep lean; prune stale.
 
-## Current state (2026-06-26 — FULL REAL-mode sim run for PO demo)
+## Current state (2026-06-27 — search suite EXPANDED to 300 cases, 100 PER SECTOR)
+- **Search hardening suite DESIGNED (not yet run) — now 300 cases:** `team/qa/search-test-cases.md` + runnable `team/qa/search-test-cases.json` (JSON validated: **300 cases, 0 dup IDs, exactly 100/sector, sequential IDs E001-100/F001-100/R001-100 complete, no malformed**). Owner directive: search runs across ALL sectors → **Electronics 100 / Food 100 / Real-estate 100** (NOT 100 split). **123 AR / 177 EN**. Schema unchanged `{id,category,query,lang,failureMode,expectation:{state,relevant,oracle}}`. IDs are 3-digit (E001…) — note: OLD refs were E01-40/F01-35/R01-25; those map to E001-040/F001-035/R001-025.
+- **Per-sector failure-mode (in meta.breakdown.per_sector):** Electronics — FM-CATALOG 67, baseline 11, FM-TYPO 7, FM-BRANDONLY 6, FM-OFFCATALOG 5, FM-CONSTRAINT 4. Food — baseline 48, FM-RELEVANCE 42, FM-TYPO 7, FM-OFFCATALOG 3. RE — FM-AREA 61, FM-TENURE 13, FM-CONSTRAINT 9, FM-PRICEUNIT 7, FM-OFFCATALOG 5, FM-TYPO 5. Totals: baseline 59, FM-CATALOG 67, FM-RELEVANCE 42, FM-AREA 61, FM-TENURE 13, FM-PRICEUNIT 7, FM-TYPO 19, FM-BRANDONLY 6, FM-OFFCATALOG 13, FM-CONSTRAINT 13 (new mode for budget/spec/bedrooms/furnished/cheapest).
+- **RE area coverage now ~35 KW areas AR+EN:** Salmiya/Salwa/Jabriya/Mahboula/Hawally + unlisted Zahra/Mishref/Bayan/Rumaithiya/Sabah Al-Salem/Mangaf/Fintas/Farwaniya/Jahra/Abu Halifa/Sharq/Dasma/Adailiya/Shaab/Bnaid Al-Qar/Qortuba/Surra/Khaitan/Jleeb/Messila/Funaitees/Abu Fteira/Sabah Al-Ahmad. Price-unit absurd-rent traps now 300k/500k/200k (R024/R080/R081).
+- **Harness contract (unchanged):** POST /search/intent {sector,locale,intentRaw,pseudoId} → skip-loop POST /search/answer {searchSessionId,dimension,answer:"__skip__"} through ≥5 gate (MIN_CLARIFIER_QUESTIONS=5) to terminal. Reuse `skipToTerminal` (clarifier-test-util.ts). Distinct pseudoId/case = un-metered. 5 global rules GR1 gate≥5, GR2 truthful, GR3 no-dump, GR4 honest-empty+broaden, GR5 price-sanity (rent 50-3000, sale ≥10k).
+- **ADR-007 failures locked (meta.adr007_regression_locks):** E006/E007 dishwasher 0-results, F001/F008 rice↔cake, F002 Bukhari→cake, F003/F004/F005 machboos drift, F009 كيك, R001/R002 Jabriya wrong-area, R009-R015 unlisted areas, R024 300k-rent.
+- **RUN IS DEFERRED:** PO triggers AFTER SLICE Q1 (electronics catalog-free discovery) lands — running now = false-red on the 67 FM-CATALOG electronics cases. RE non-empty also blocked on live KW RE IG handles (D-RUN-1); until seeded their PASS bar = honest-empty+broaden. WORKFLOW §7: iterate until AC holds across all 300, not first green.
+
+## Prior state (2026-06-27 — LATEST-BUILD owner handoff + Bukhari→cake fix)
+- **Rebuilt CLEAN for owner:** killed stale :8765, `build:types`+`build apps/api` (no errors), DELETED `apps/mobile/dist` then `npx expo export --platform web` (fresh, bundle base URL baked=http://localhost:3000 — grep-confirmed). API restarted real-mode :3000 (claude=anthropic,liveFetch=on,social=apify,extractor=anthropic,otp/billing=mock), health 200. SPA via `/tmp/bo-spa.js` on :8765 (root+/categories both 200). Both LEFT RUNNING. Login code 000000.
+- **Bukhari→cake FIX — VERIFIED at data layer** (sim has no tap tooling; drove clarifier flow via /search intent+answer skip-loop, `/tmp/bo-drive2.js`):
+  - بخاري (food) → 15 cards ALL rice/biryani/mansaf (Tikka Rice, Saffron/White Rice, Chicken+Lamb Biryani, mansaf @scale.kuwait). ZERO cake. Rice-routed.
+  - كيك (food) → 21 cards real desserts (Chocolate Cake, Lotus/Oreo Cheesecake, Saffron Milk Cake, Tiramisu, Umm Ali, Kunafa, Mafroukeh + IG @bakehaus cake). Clean separation.
+- **Category landing RENDERS on sim — VERIFIED** (`team/qa/sim/handoff-categories.png`): Electronics+Food+RealEstate active, Cars Soon, RTL AR, v2 theme.
+
+## Prior state (2026-06-27 — FRESH-BUILD sim handoff for owner)
+- **Rebuilt CLEAN for owner demo:** killed stale :8765, `npm run build:types` + `build apps/api` (no errors), DELETED `apps/mobile/dist` then `npx expo export --platform web` (fresh). API restarted real-mode :3000 (claude=anthropic,liveFetch=on,social=apify,extractor=anthropic,otp/billing=mock). Serve fresh dist via custom Node SPA-fallback server `/tmp/bo-spa.js` on :8765 (`serve -s` 301→404s deep routes; don't use it — use the node fallback). Bundle base URL baked = http://localhost:3000.
+- **Clarifiers FIRE — VERIFIED on sim** (shot `build-01-elec-clarifier.png` electronics "1 من 5" MSA Q+chips; `build-02-food-clarifier.png` food "2 من 5" party-size). Server ≥5 gate walks model→storage→color→budget→condition then dispatches (5 distinct, count/total render). Both via `/search?cat=..&q=..` auto-run.
+- **Food relevance FIXED — VERIFIED at data layer** (sim can't tap past clarifier gate to reach results screen; no tap tooling). "Chilled with rice" → 14 cards ALL rice/biryani (Tikka Rice, Saffron Rice, Chicken/Lamb Biryani, rice bowls), NO sauces, NO Test-vendor. food-relevance.ts filter working.
+- **Real Estate "Salwa" — IMPROVED:** now returns 1 real card "3BR · Salwa" from @q8_rent (was 0 in D-RUN-1). Partial close of the data gap; still thin, not the build.
+- Login code (mock OTP) = 000000. Both servers LEFT RUNNING (API pid varies on :3000, SPA on :8765).
+
+## Prior state (2026-06-26 — FULL REAL-mode sim run for PO demo)
 - Report: `team/qa/sim/run-report.md` (NEW, 6 real shots `team/qa/sim/run-01..06`). Prior: `qa-v2-device-report.md`, `qa-simulator-report.md`.
 - **FULL REAL run (claude=anthropic, liveFetch=on, social=apify, extractor=anthropic; billing/otp=mock):**
   - **Categories PASS** — NOW 3 active tiles Electronics+Food+**RealEstate(عقارات شقق)**, only Cars Soon. NOTE: served dist was STALE (old 2-active layout) — had to RE-EXPORT (`cd apps/mobile && npx expo export --platform web`). Always re-export before a demo.

@@ -90,9 +90,22 @@ function modelIsExactlyAsked(skuModel: string, askedModel: string): boolean {
  */
 const DISCOVERY_SECTORS = new Set(['food', 'realestate']);
 
+/**
+ * Catalog-free ELECTRONICS discovery (ADR-007 Q1): when LIVE_FETCH is on, electronics offers are
+ * SYNTHESIZED from each provider's real search hit (sku.category='electronics', id 'elec_…'). The
+ * provider search already matched the query, so — exactly like food/real-estate — every such offer is
+ * a relevant exact result; there is no in-code model identity to anchor the electronics model-substring
+ * fallback machinery on. (The offline MOCK_SKUS path keeps category 'smartphone'/'laptop'/'tv'/… and
+ * the strict model-identity matching below — Pro ≠ Pro Max precision specs depend on it.)
+ */
+function isDiscoveredOffer(intent: IntentNormalized, o: ResolvedOffer): boolean {
+  if (intent.category && DISCOVERY_SECTORS.has(intent.category)) return true;
+  return o.sku.category === 'electronics';
+}
+
 /** Does this offer satisfy ALL stated hard constraints (model+storage+color+budget where given)? */
 export function isExactMatch(intent: IntentNormalized, o: ResolvedOffer): boolean {
-  if (intent.category && DISCOVERY_SECTORS.has(intent.category)) {
+  if (isDiscoveredOffer(intent, o)) {
     // Only a stated budget can exclude a discovered offer; a price-on-request offer (priceFils=0) is
     // never budget-excluded (its price is unknown, not zero).
     const { budgetFils } = intent.constraints;

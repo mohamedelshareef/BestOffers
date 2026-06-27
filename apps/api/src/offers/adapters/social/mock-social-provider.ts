@@ -119,6 +119,32 @@ const SEED_POSTS: RawPost[] = [
       '1 bedroom unfurnished in Mangaf near the corniche — 230 KWD/month.',
   },
 
+  // ── Real estate — flats FOR SALE (تمليك / للبيع) — must NOT appear in a rent query ─────────────
+  {
+    id: 'C8aRe09',
+    ownerHandle: 'salmiya.rentals',
+    vertical: 'realestate',
+    permalink: 'https://www.instagram.com/p/C8aRe09s5Sl/',
+    imageUrl: 'https://placehold.co/600x600/075345/FFFFFF?text=Salmiya+Sale',
+    timestamp: daysAgo(3),
+    caption:
+      'للبيع شقة تمليك في السالمية 🏢 ثلاث غرف نوم، مساحة 180 متر، تشطيب فاخر.\n' +
+      'السعر 300,000 د.ك. للجادين فقط، التواصل دايركت.\n' +
+      'For sale: 3BR freehold apartment in Salmiya, 180 sqm — 300,000 KWD.',
+  },
+  {
+    id: 'C8aRe10',
+    ownerHandle: 'salwa.homes.kw',
+    vertical: 'realestate',
+    permalink: 'https://www.instagram.com/p/C8aRe10t2Wm/',
+    imageUrl: 'https://placehold.co/600x600/0B6B5B/FFFFFF?text=Salwa+Sale',
+    timestamp: daysAgo(6),
+    caption:
+      'بيت للبيع في السالوة 🏠 دور كامل، أربع غرف نوم، صالتين، حوش خلفي.\n' +
+      'السعر 450,000 دينار، قابل للتفاوض.\n' +
+      'House for sale in Salwa — full floor, 4BR — 450,000 KWD, negotiable.',
+  },
+
   // ── Food — IG restaurant / meal-prep / dessert offers (mix of literal price + DM) ──────────────
   {
     id: 'C8aFo01',

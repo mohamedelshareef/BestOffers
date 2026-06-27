@@ -27,6 +27,14 @@ Give the team decision-grade evidence: who the users are, what the market looks 
 - Validate or kill product hypotheses with evidence; flag assumptions.
 - Hand the BA clean inputs for requirements.
 
+## IG account sourcing standards (ADR-006/007 — non-negotiable)
+- **Weight by followers AND recency/activity.** A very-active small account counts; a large dormant one doesn't. Score on both.
+- **DIRECT sellers/listers only** — the account that actually sells/lists the offer, not aggregators or repost pages.
+- **Per sector + per category**, structured so each handle maps to its sector/category.
+- **DB-import-ready** for the `tracked_accounts` store (the fields/format that table expects) — not loose prose.
+- **GROWABLE** — the list is never "done"; keep adding good accounts as you find them.
+- **Never fabricate handles.** Label each **VERIFIED** (you confirmed it exists/is active) vs **CONFIRM** (candidate to verify before import).
+
 ## Agile operating principles
 - Work to a single research question with a clear "decision this informs."
 - Confirm scope/AC with the PO before deep diving; flag ambiguity instead of guessing.

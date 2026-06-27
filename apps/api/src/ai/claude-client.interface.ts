@@ -31,6 +31,19 @@ export interface ClarifierResult {
   question?: ClarifierQuestionDraft;
 }
 
+/** Input for the SMART clarifier-set generation (OWNER DIRECTIVE 2026-06-27). */
+export interface ClarifierSetInput {
+  /** the user's raw request — the questions must be tailored to THIS exact item. */
+  intentRaw: string;
+  /** category tile the user came from (electronics | food | realestate …). */
+  sector: string;
+  locale: Locale;
+  /** how many distinct dimensions Claude should propose (the ≥5 floor). */
+  minQuestions: number;
+  /** dimensions the free-text intent already resolved — Claude must NOT re-ask these (RULE-7). */
+  alreadyResolved: string[];
+}
+
 /** One offer's explanation, grounded in a supplied attribute. */
 export interface RankExplanation {
   offerId: string;
@@ -50,6 +63,16 @@ export interface RankInput {
 export interface ClaudeClient {
   /** Step 1: intent + clarifier (Opus in prod). */
   clarify(input: ClarifierInput): Promise<ClarifierResult>;
+  /**
+   * Step 1b (OWNER DIRECTIVE 2026-06-27): generate a SMART, query-specific set of ≥`minQuestions`
+   * narrowing dimensions for THIS exact request — NOT a generic per-sector list. e.g. "laptop" →
+   * use-case/RAM/screen/budget/brand; "iPhone 16" → storage/color/budget/condition/AppleCare;
+   * "chilled with rice" → which-rice/protein/spice/portion/budget. Each dimension stays strictly on
+   * the SAME requested item (no drift, no upsell to a different product). Runs on the FAST model.
+   * The orchestrator falls back to the deterministic config set (`clarifier-sets.ts`) if this throws,
+   * times out, or returns fewer than `minQuestions` usable dimensions — so it never breaks the flow.
+   */
+  clarifierSet(input: ClarifierSetInput): Promise<ClarifierQuestionDraft[]>;
   /** Step 2: explanations for an ALREADY-RANKED list (Opus in prod). */
   explainRanking(input: RankInput): Promise<RankExplanation[]>;
 }

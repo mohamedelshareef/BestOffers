@@ -1,0 +1,371 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&family=Tajawal:wght@400;500;700;800&display=swap" rel="stylesheet">
+<style>
+  *{box-sizing:border-box}
+  body{margin:0}
+  @keyframes bo-float{0%,100%{transform:translateY(0)}50%{transform:translateY(-12px)}}
+  .bo-card{transition:transform .2s ease, box-shadow .2s ease}
+  .bo-card:hover{transform:translateY(-4px)}
+  .bo-link{transition:color .15s ease}
+  .bo-link:hover{color:var(--teal)}
+  @media(min-width:860px){.bo-nav-links{display:flex !important}}
+  @media(max-width:860px){
+    .bo-hero{grid-template-columns:1fr !important}
+    .bo-grid3,.bo-grid4{grid-template-columns:1fr 1fr !important}
+    .bo-grid5{grid-template-columns:1fr 1fr 1fr !important}
+  }
+  @media(max-width:560px){
+    .bo-grid3,.bo-grid4,.bo-grid5{grid-template-columns:1fr !important}
+  }
+</style>
+</helmet>
+<div dir="{{ dir }}" style="--teal:#0B6B5B;--teal-strong:#075345;--teal-soft:#E3F2EE;--gold:#C8881C;--gold-strong:#A86E0E;--gold-soft:#FBF0D9;--canvas:#FBF8F3;--surface:#FFFFFF;--surface-alt:#F1ECE3;--ink:#18211F;--ink2:#5C6864;--on-gold:#2A1D03;--border:#E6DFD4;--border-strong:#D6CDBE;--teal-grad:linear-gradient(135deg,#0E8C74,#075345);--gold-grad:linear-gradient(135deg,#E0A93B,#C8881C);--disp:'Plus Jakarta Sans','Tajawal',system-ui,sans-serif;--body:'Plus Jakarta Sans','Tajawal',system-ui,sans-serif;background:var(--canvas);font-family:var(--body);color:var(--ink);min-height:100vh;overflow-x:hidden">
+
+  <!-- ===== NAV ===== -->
+  <nav style="position:sticky;top:0;z-index:30;backdrop-filter:blur(14px);background:rgba(251,248,243,.82);border-bottom:1px solid var(--border)">
+    <div style="max-width:1180px;margin:0 auto;padding:15px 28px;display:flex;align-items:center;gap:18px">
+      <div style="display:flex;align-items:center;gap:11px">
+        <div style="width:34px;height:34px;border-radius:10px;background:var(--teal-grad);position:relative;flex:none">
+          <div style="position:absolute;inset:0;display:grid;place-items:center"><div style="position:relative;width:18px;height:18px"><div style="position:absolute;left:7px;top:0;width:4px;height:18px;border-radius:3px;background:#fff"></div><div style="position:absolute;top:7px;left:0;width:18px;height:4px;border-radius:3px;background:#fff"></div><div style="position:absolute;left:5px;top:5px;width:8px;height:8px;border-radius:50%;background:var(--gold)"></div></div></div>
+        </div>
+        <span style="font-family:var(--disp);font-weight:700;font-size:19px"><span style="color:var(--teal)">Best</span>Offers</span>
+      </div>
+      <div style="flex:1"></div>
+      <div style="display:none;gap:26px;align-items:center" class="bo-nav-links">
+        <sc-for list="{{ navLinks }}" as="l" hint-placeholder-count="4">
+          <span class="bo-link" style="font-size:14.5px;font-weight:500;color:var(--ink2);cursor:pointer">{{ l }}</span>
+        </sc-for>
+      </div>
+      <button onClick="{{ toggleLang }}" style="border:1px solid var(--border-strong);background:var(--surface);color:var(--ink);font-family:var(--disp);font-weight:600;font-size:13.5px;padding:8px 15px;border-radius:999px;cursor:pointer">{{ langToggleLabel }}</button>
+      <button style="border:none;background:var(--teal-grad);color:#fff;font-family:var(--disp);font-weight:600;font-size:14px;padding:10px 18px;border-radius:12px;cursor:pointer;box-shadow:0 10px 22px -12px rgba(7,83,69,.6)">{{ t.navCta }}</button>
+    </div>
+  </nav>
+
+  <!-- ===== HERO ===== -->
+  <section style="max-width:1180px;margin:0 auto;padding:64px 28px 40px;display:grid;grid-template-columns:1.05fr .95fr;gap:48px;align-items:center" class="bo-hero">
+    <div>
+      <div style="display:inline-flex;align-items:center;gap:8px;background:var(--teal-soft);color:var(--teal-strong);font-size:13px;font-weight:600;padding:7px 14px;border-radius:999px;margin-bottom:22px">
+        <span style="width:7px;height:7px;border-radius:50%;background:var(--gold)"></span>{{ t.heroBadge }}
+      </div>
+      <h1 style="font-family:var(--body);font-weight:700;font-size:clamp(34px,4vw,52px);line-height:1.18;margin:0 0 20px;letter-spacing:-.5px">{{ t.heroH1 }}</h1>
+      <p style="font-size:18px;line-height:1.7;color:var(--ink2);margin:0 0 30px;max-width:520px">{{ t.heroSub }}</p>
+      <div style="display:flex;gap:13px;flex-wrap:wrap">
+        <button style="display:flex;align-items:center;gap:10px;background:var(--ink);color:#fff;border:none;border-radius:14px;padding:13px 20px;cursor:pointer">
+          <svg width="22" height="22" viewBox="0 0 24 24" fill="currentColor"><path d="M16.5 1.5c.1 1.1-.3 2.2-1 3-.7.9-1.9 1.5-3 1.4-.1-1.1.4-2.2 1-3 .8-.9 2-1.5 3-1.4zM20 17.4c-.5 1.2-.8 1.7-1.4 2.8-1 1.5-2.3 3.4-4 3.4-1.5 0-1.9-1-3.9-1-2 0-2.4 1-3.9 1-1.7 0-3-1.7-4-3.2-2.7-4.2-3-9.1-1.3-11.7 1.2-1.9 3-3 4.8-3 1.7 0 2.8 1 4.2 1 1.4 0 2.2-1 4.2-1 1.5 0 3.2.8 4.4 2.3-3.9 2.1-3.3 7.7.8 9.6z"/></svg>
+          <span style="text-align:start;line-height:1.1"><span style="display:block;font-size:10px;opacity:.8">{{ t.appStoreTop }}</span><span style="font-family:var(--disp);font-weight:600;font-size:15px">App Store</span></span>
+        </button>
+        <button style="display:flex;align-items:center;gap:10px;background:var(--surface);color:var(--ink);border:1px solid var(--border-strong);border-radius:14px;padding:13px 20px;cursor:pointer">
+          <svg width="22" height="22" viewBox="0 0 24 24"><path fill="#0B6B5B" d="M3.6 2.3 13 11.7l-2.5 2.5L3.6 2.3z" opacity=".9"/><path fill="#C8881C" d="m16 8.8 3 1.7c.9.5.9 1.5 0 2l-3 1.7-2.7-2.7L16 8.8z"/><path fill="#18211F" d="M3.6 21.7 11 14.2l2.5 2.5-9.9 5z" opacity=".8"/><path fill="#5C6864" d="M3 2.6C3 2 3.3 2 3.6 2.3l7.4 7.4-2 2L3 4.6V2.6z" opacity=".5"/></svg>
+          <span style="text-align:start;line-height:1.1"><span style="display:block;font-size:10px;color:var(--ink2)">{{ t.googlePlayTop }}</span><span style="font-family:var(--disp);font-weight:600;font-size:15px">Google Play</span></span>
+        </button>
+      </div>
+      <div style="display:flex;align-items:center;gap:9px;margin-top:24px;color:var(--ink2);font-size:13.5px">
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="var(--teal)" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/></svg>
+        {{ t.heroTrust }}
+      </div>
+    </div>
+
+    <!-- phone mock -->
+    <div style="display:flex;justify-content:center">
+      <div style="width:300px;background:#070D0B;border-radius:42px;padding:9px;box-shadow:0 50px 90px -40px rgba(7,83,69,.55);animation:bo-float 6s ease-in-out infinite">
+        <div dir="{{ dir }}" style="background:var(--canvas);border-radius:34px;overflow:hidden">
+          <div style="padding:16px 18px 6px;display:flex;align-items:center;justify-content:space-between;font-family:var(--disp);font-size:12px;font-weight:600;color:var(--ink)"><span style="direction:ltr">9:41</span><span style="opacity:.6">●●●</span></div>
+          <div style="padding:6px 16px 20px">
+            <div style="font-family:var(--disp);font-size:10px;letter-spacing:1.5px;color:var(--teal);font-weight:600">{{ t.mockEyebrow }}</div>
+            <div style="font-weight:600;font-size:15px;margin:4px 0 14px">{{ t.mockQuery }}</div>
+            <div style="background:var(--surface);border:1px solid var(--gold);border-radius:14px;overflow:hidden;box-shadow:0 16px 30px -18px rgba(200,136,28,.55)">
+              <div style="background:var(--gold-grad);padding:9px 13px;display:flex;align-items:center;gap:8px;color:var(--on-gold)">
+                <span style="width:20px;height:20px;border-radius:50%;background:rgba(42,29,3,.16);display:grid;place-items:center;flex:none"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6 9 17l-5-5"/></svg></span>
+                <div style="line-height:1.2"><div style="font-family:var(--disp);font-weight:700;font-size:11.5px">{{ t.mockVerdict }}</div><div style="font-size:10px;opacity:.9">{{ t.mockReason }}</div></div>
+              </div>
+              <div style="padding:12px;display:flex;gap:10px;align-items:center">
+                <div style="width:54px;height:54px;border-radius:10px;background:var(--surface-alt);flex:none;display:grid;place-items:center;color:var(--border-strong)"><svg width="26" height="26" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M5 4a2 2 0 0 1 2-2h10a2 2 0 0 1 2 2v16a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2z"/></svg></div>
+                <div style="flex:1;min-width:0"><div style="font-family:var(--disp);font-weight:600;font-size:13px">{{ t.mockProduct }}</div><span style="display:inline-block;margin-top:5px;background:var(--teal-soft);color:var(--teal-strong);font-size:9.5px;font-weight:600;padding:3px 8px;border-radius:999px">{{ t.mockWhy }}</span><div style="font-size:11px;color:var(--ink2);margin-top:5px;direction:ltr;unicode-bidi:isolate;text-align:start">Xcite</div></div>
+                <div style="white-space:nowrap"><span style="font-family:var(--disp);font-weight:800;font-size:15px;color:var(--gold);direction:ltr">412.000</span></div>
+              </div>
+            </div>
+            <sc-for list="{{ t.mockRows }}" as="m" hint-placeholder-count="2">
+              <div style="background:var(--surface);border:1px solid var(--border);border-radius:13px;padding:10px 12px;display:flex;align-items:center;gap:10px;margin-top:9px">
+                <div style="width:38px;height:38px;border-radius:9px;background:var(--surface-alt);flex:none"></div>
+                <div style="flex:1;font-size:12px;color:var(--ink2);direction:ltr;unicode-bidi:isolate;text-align:start">{{ m.provider }}</div>
+                <span style="font-family:var(--disp);font-weight:800;font-size:13px;color:var(--gold);direction:ltr">{{ m.price }}</span>
+              </div>
+            </sc-for>
+          </div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ===== TRUST STRIP ===== -->
+  <section style="border-top:1px solid var(--border);border-bottom:1px solid var(--border);background:var(--surface)">
+    <div style="max-width:1180px;margin:0 auto;padding:20px 28px;display:flex;flex-wrap:wrap;gap:14px 38px;align-items:center;justify-content:center">
+      <sc-for list="{{ t.trustItems }}" as="ti" hint-placeholder-count="3">
+        <div style="display:flex;align-items:center;gap:9px;font-size:14px;font-weight:600;color:var(--ink)">
+          <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="var(--teal)" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6 9 17l-5-5"/></svg>{{ ti }}
+        </div>
+      </sc-for>
+    </div>
+  </section>
+
+  <!-- ===== THREE-PART DEAL ===== -->
+  <section style="max-width:1180px;margin:0 auto;padding:80px 28px 30px">
+    <div style="text-align:center;margin-bottom:44px">
+      <div style="font-family:var(--disp);font-size:12px;letter-spacing:2px;color:var(--gold-strong);font-weight:600;text-transform:uppercase">{{ t.dealEyebrow }}</div>
+      <h2 style="font-family:var(--body);font-weight:700;font-size:clamp(28px,3vw,40px);margin:12px 0 0;letter-spacing:-.4px">{{ t.dealH2 }}</h2>
+    </div>
+    <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:20px" class="bo-grid3">
+      <sc-for list="{{ t.deals }}" as="d" hint-placeholder-count="3">
+        <div class="bo-card" style="background:var(--surface);border:1px solid var(--border);border-radius:20px;padding:30px 26px;box-shadow:0 14px 36px -26px rgba(0,0,0,.3)">
+          <div style="width:52px;height:52px;border-radius:14px;background:var(--teal-soft);color:var(--teal);display:grid;place-items:center;margin-bottom:18px"><svg width="26" height="26" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="{{ d.icon }}"/></svg></div>
+          <h3 style="font-family:var(--disp);font-weight:600;font-size:20px;margin:0 0 9px">{{ d.title }}</h3>
+          <p style="font-size:15px;line-height:1.65;color:var(--ink2);margin:0">{{ d.body }}</p>
+        </div>
+      </sc-for>
+    </div>
+  </section>
+
+  <!-- ===== HOW IT WORKS ===== -->
+  <section style="background:var(--surface-alt);margin-top:60px">
+    <div style="max-width:1180px;margin:0 auto;padding:80px 28px">
+      <div style="text-align:center;margin-bottom:50px">
+        <div style="font-family:var(--disp);font-size:12px;letter-spacing:2px;color:var(--teal);font-weight:600;text-transform:uppercase">{{ t.howEyebrow }}</div>
+        <h2 style="font-family:var(--body);font-weight:700;font-size:clamp(28px,3vw,40px);margin:12px 0 0;letter-spacing:-.4px">{{ t.howH2 }}</h2>
+      </div>
+      <div style="display:grid;grid-template-columns:repeat(4,1fr);gap:18px" class="bo-grid4">
+        <sc-for list="{{ t.steps }}" as="s" hint-placeholder-count="4">
+          <div style="background:var(--canvas);border:1px solid var(--border);border-radius:18px;padding:26px 22px;position:relative">
+            <div style="font-family:var(--disp);font-weight:800;font-size:36px;color:var(--gold);opacity:.28;direction:ltr">{{ s.num }}</div>
+            <h3 style="font-family:var(--disp);font-weight:600;font-size:17px;margin:8px 0 8px">{{ s.title }}</h3>
+            <p style="font-size:14px;line-height:1.6;color:var(--ink2);margin:0">{{ s.body }}</p>
+          </div>
+        </sc-for>
+      </div>
+    </div>
+  </section>
+
+  <!-- ===== SIGNATURE MOMENT ===== -->
+  <section style="max-width:1180px;margin:0 auto;padding:90px 28px;display:grid;grid-template-columns:1fr 1fr;gap:56px;align-items:center" class="bo-hero">
+    <div>
+      <div style="display:inline-flex;align-items:center;gap:8px;background:var(--gold-soft);color:var(--gold-strong);font-size:13px;font-weight:700;padding:7px 14px;border-radius:999px;margin-bottom:20px">{{ t.sigBadge }}</div>
+      <h2 style="font-family:var(--body);font-weight:700;font-size:clamp(28px,3vw,42px);line-height:1.2;margin:0 0 18px;letter-spacing:-.4px">{{ t.sigH2 }}</h2>
+      <p style="font-size:17px;line-height:1.7;color:var(--ink2);margin:0 0 24px">{{ t.sigBody }}</p>
+      <div style="display:flex;flex-direction:column;gap:14px">
+        <sc-for list="{{ t.sigPoints }}" as="p" hint-placeholder-count="3">
+          <div style="display:flex;align-items:flex-start;gap:12px">
+            <span style="width:26px;height:26px;border-radius:8px;background:var(--gold-soft);color:var(--gold-strong);display:grid;place-items:center;flex:none;margin-top:1px"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6 9 17l-5-5"/></svg></span>
+            <span style="font-size:15.5px;line-height:1.55;color:var(--ink)">{{ p }}</span>
+          </div>
+        </sc-for>
+      </div>
+    </div>
+    <div style="background:var(--ink);border-radius:24px;padding:46px 40px;color:#fff;position:relative;overflow:hidden">
+      <div style="position:absolute;inset:0;background:radial-gradient(420px 220px at 80% -10%, rgba(200,136,28,.22), transparent)"></div>
+      <div style="position:relative">
+        <div style="background:var(--gold-grad);border-radius:16px;padding:18px 22px;display:flex;align-items:center;gap:13px;color:var(--on-gold);box-shadow:0 20px 50px -20px rgba(200,136,28,.7)">
+          <span style="width:36px;height:36px;border-radius:50%;background:rgba(42,29,3,.18);display:grid;place-items:center;flex:none"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6 9 17l-5-5"/></svg></span>
+          <div><div style="font-family:var(--disp);font-weight:700;font-size:17px">{{ t.sigVerdict }}</div><div style="font-size:13px;opacity:.9">{{ t.sigReason }}</div></div>
+        </div>
+        <div style="margin-top:18px;display:flex;align-items:center;justify-content:space-between;background:rgba(255,255,255,.06);border:1px solid rgba(255,255,255,.12);border-radius:14px;padding:16px 18px">
+          <div><div style="font-family:var(--disp);font-weight:600;font-size:15px">{{ t.mockProduct }}</div><div style="font-size:12px;opacity:.6;margin-top:3px;direction:ltr;unicode-bidi:isolate;text-align:start">Xcite · Kuwait</div></div>
+          <div style="font-family:var(--disp);font-weight:800;font-size:22px;color:#F1D7A0;direction:ltr">412.000</div>
+        </div>
+        <p style="font-size:13.5px;line-height:1.6;color:rgba(255,255,255,.62);margin:18px 0 0">{{ t.sigCaption }}</p>
+      </div>
+    </div>
+  </section>
+
+  <!-- ===== CATEGORIES ===== -->
+  <section style="background:var(--surface-alt)">
+    <div style="max-width:1180px;margin:0 auto;padding:80px 28px">
+      <div style="text-align:center;margin-bottom:44px">
+        <div style="font-family:var(--disp);font-size:12px;letter-spacing:2px;color:var(--teal);font-weight:600;text-transform:uppercase">{{ t.catEyebrow }}</div>
+        <h2 style="font-family:var(--body);font-weight:700;font-size:clamp(28px,3vw,40px);margin:12px 0 0;letter-spacing:-.4px">{{ t.catH2 }}</h2>
+      </div>
+      <div style="display:grid;grid-template-columns:repeat(5,1fr);gap:16px" class="bo-grid5">
+        <sc-for list="{{ t.categories }}" as="c" hint-placeholder-count="5">
+          <div style="{{ c.style }}">
+            <div style="{{ c.iconWrap }}"><svg width="26" height="26" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="{{ c.icon }}"/></svg></div>
+            <div style="font-family:var(--disp);font-weight:600;font-size:16px;margin-top:14px">{{ c.name }}</div>
+            <sc-if value="{{ c.soon }}" hint-placeholder-val="{{ true }}"><span style="display:inline-block;margin-top:7px;background:var(--surface);border:1px dashed var(--border-strong);color:var(--ink2);font-size:11px;font-weight:600;padding:3px 10px;border-radius:999px">{{ c.tag }}</span></sc-if>
+            <sc-if value="{{ c.active }}" hint-placeholder-val="{{ true }}"><span style="display:inline-block;margin-top:7px;color:var(--teal);font-size:12.5px;font-weight:600">{{ c.tag }}</span></sc-if>
+          </div>
+        </sc-for>
+      </div>
+    </div>
+  </section>
+
+  <!-- ===== PRICING / CTA ===== -->
+  <section style="max-width:1180px;margin:0 auto;padding:90px 28px">
+    <div style="background:var(--teal);border-radius:28px;padding:60px 44px;text-align:center;color:#fff;position:relative;overflow:hidden">
+      <div style="position:absolute;inset:0;background:radial-gradient(600px 300px at 50% -20%, rgba(224,169,59,.2), transparent)"></div>
+      <div style="position:relative;max-width:620px;margin:0 auto">
+        <div style="font-family:var(--disp);font-size:12px;letter-spacing:2px;color:#F1D7A0;font-weight:600;text-transform:uppercase">{{ t.priceEyebrow }}</div>
+        <h2 style="font-family:var(--body);font-weight:700;font-size:clamp(30px,3.4vw,46px);margin:14px 0 12px;letter-spacing:-.5px">{{ t.priceH2 }}</h2>
+        <div style="display:flex;align-items:baseline;justify-content:center;gap:8px;margin:18px 0 8px"><span style="font-family:var(--disp);font-weight:800;font-size:60px;direction:ltr">$1</span><span style="font-size:18px;opacity:.85">{{ t.priceMonth }}</span></div>
+        <p style="font-size:16px;line-height:1.7;color:rgba(255,255,255,.82);margin:8px auto 28px;max-width:480px">{{ t.priceSub }}</p>
+        <div style="display:flex;gap:13px;justify-content:center;flex-wrap:wrap">
+          <button style="background:var(--gold-grad);color:var(--on-gold);border:none;border-radius:14px;padding:14px 26px;font-family:var(--disp);font-weight:700;font-size:16px;cursor:pointer;box-shadow:0 16px 34px -16px rgba(0,0,0,.5)">{{ t.priceCta }}</button>
+          <button style="background:rgba(255,255,255,.1);color:#fff;border:1px solid rgba(255,255,255,.25);border-radius:14px;padding:14px 26px;font-family:var(--disp);font-weight:600;font-size:16px;cursor:pointer">{{ t.priceCta2 }}</button>
+        </div>
+        <div style="font-size:12.5px;color:rgba(255,255,255,.6);margin-top:18px">{{ t.priceFine }}</div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ===== FOOTER ===== -->
+  <footer style="border-top:1px solid var(--border);background:var(--surface)">
+    <div style="max-width:1180px;margin:0 auto;padding:40px 28px;display:flex;flex-wrap:wrap;gap:20px;align-items:center;justify-content:space-between">
+      <div style="display:flex;align-items:center;gap:11px">
+        <div style="width:30px;height:30px;border-radius:9px;background:var(--teal-grad);position:relative"><div style="position:absolute;inset:0;display:grid;place-items:center"><div style="position:relative;width:16px;height:16px"><div style="position:absolute;left:6px;top:0;width:3.5px;height:16px;border-radius:3px;background:#fff"></div><div style="position:absolute;top:6px;left:0;width:16px;height:3.5px;border-radius:3px;background:#fff"></div><div style="position:absolute;left:4.5px;top:4.5px;width:7px;height:7px;border-radius:50%;background:var(--gold)"></div></div></div></div>
+        <span style="font-family:var(--disp);font-weight:700;font-size:16px"><span style="color:var(--teal)">Best</span>Offers</span>
+      </div>
+      <div style="font-size:13px;color:var(--ink2)">{{ t.footer }}</div>
+    </div>
+  </footer>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props="{&quot;lang&quot;:{&quot;editor&quot;:&quot;enum&quot;,&quot;options&quot;:[&quot;en&quot;,&quot;ar&quot;],&quot;default&quot;:&quot;en&quot;,&quot;tsType&quot;:&quot;'en'|'ar'&quot;,&quot;section&quot;:&quot;Content&quot;}}">
+class Component extends DCLogic {
+  state = { lang: null };
+  toggleLang() { const cur = this.state.lang ?? this.props.lang ?? 'en'; this.setState({ lang: cur === 'en' ? 'ar' : 'en' }); }
+
+  renderVals() {
+    const lang = this.state.lang ?? this.props.lang ?? 'en';
+    const I = {
+      deal: 'M12 2 4 5v6c0 5 3.4 8 8 11 4.6-3 8-6 8-11V5l-8-3z',
+      ai: 'M12 3v3M12 18v3M3 12h3M18 12h3M7 7l2 2M15 15l2 2M17 7l-2 2M9 15l-2 2M12 8a4 4 0 1 0 0 8 4 4 0 0 0 0-8z',
+      shield: 'M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z',
+      phone: 'M5 4a2 2 0 0 1 2-2h10a2 2 0 0 1 2 2v16a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2zM11 18h2',
+      food: 'M3 2v7a2 2 0 0 0 2 2 2 2 0 0 0 2-2V2M5 2v20M17 2c-1.7 0-3 2-3 5v6h3M17 2v20',
+      home: 'M3 10.5 12 3l9 7.5M5 9v11h14V9',
+      sofa: 'M4 11V8a2 2 0 0 1 2-2h12a2 2 0 0 1 2 2v3M3 13a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2v5H3zM6 18v2M18 18v2',
+      car: 'M5 13l1.6-4.8A2 2 0 0 1 8.5 7h7a2 2 0 0 1 1.9 1.2L19 13M5 13h14v5H5zM8 18v2M16 18v2',
+    };
+
+    const EN = {
+      navCta: 'Get the app', navLinks: ['Product', 'How it works', 'Categories', 'Pricing'],
+      heroBadge: "Kuwait's AI offers concierge",
+      heroH1: 'Ask in your dialect — get the best offer in Kuwait, ranked honestly.',
+      heroSub: 'BestOffers understands Kuwaiti and Gulf Arabic, asks a few sharp questions, then compares live offers across stores and Instagram — and shows you the winner, with the reason.',
+      appStoreTop: 'Download on the', googlePlayTop: 'Get it on',
+      heroTrust: 'No ads · No hidden commissions · Just the best price',
+      mockEyebrow: 'BEST-PRICE VERDICT', mockQuery: 'iPhone 17 Pro Max · 512GB',
+      mockVerdict: 'Best offer', mockReason: '18.000 KWD below average',
+      mockProduct: 'iPhone 17 Pro Max 512GB', mockWhy: '512GB black — matches',
+      mockRows: [{ provider: 'Eureka', price: '419.000' }, { provider: 'Best Al-Yousifi', price: '425.000' }],
+      trustItems: ['No paid ads', 'No hidden commissions', 'Neutral ranking', 'Real prices only'],
+      dealEyebrow: 'The promise', dealH2: 'One place that finds the best deal for you — not for a retailer.',
+      deals: [
+        { icon: I.deal, title: 'Best deal', body: 'Honest, ranked, cross-provider results — each with a "why this offer" reason grounded in exactly what you asked for.' },
+        { icon: I.ai, title: 'Smart AI', body: 'Understands Kuwaiti and Gulf dialect and intent. It clarifies before searching — not after — so the result is precise.' },
+        { icon: I.shield, title: 'Trusted & neutral', body: 'No carts, no ads, no checkout. We are the unbiased layer above every retailer and delivery app — not a store.' },
+      ],
+      howEyebrow: 'How it works', howH2: 'From a sentence to a verdict, in seconds.',
+      steps: [
+        { num: '01', title: 'Say what you want', body: 'Type in your dialect, English, or both. No filters to tune.' },
+        { num: '02', title: 'Answer a few', body: 'Sharp, sector-aware questions — tap a chip or skip. Smart, not an interrogation.' },
+        { num: '03', title: 'We compare', body: 'Live offers across local stores and Instagram, ranked neutrally.' },
+        { num: '04', title: 'The verdict', body: 'The best price wins a gold ribbon — with the reason it won.' },
+      ],
+      sigBadge: '✦ The signature moment',
+      sigH2: 'The best-price verdict.', 
+      sigBody: 'When the results resolve, the top offer earns a deal-gold verdict ribbon and a one-line, intent-grounded reason. The instant the comparing is done — and you can see why this one won.',
+      sigPoints: ['A reason grounded in what you actually asked for', 'Gold means price quality — never a promo shout', 'Deterministic, neutral ranking with no sponsored boosts'],
+      sigVerdict: 'Best offer', sigReason: '18.000 KWD below average',
+      sigCaption: 'Gold appears here and on the price — nowhere else does it carry this weight.',
+      catEyebrow: 'Categories', catH2: 'Three live today. More on the way.',
+      categories: [
+        { name: 'Electronics', icon: I.phone, active: true, tag: 'Live' },
+        { name: 'Food', icon: I.food, active: true, tag: 'Live' },
+        { name: 'Real-estate', icon: I.home, active: true, tag: 'Live' },
+        { name: 'Furniture', icon: I.sofa, soon: true, tag: 'Soon' },
+        { name: 'Cars', icon: I.car, soon: true, tag: 'Soon' },
+      ],
+      priceEyebrow: 'Pricing', priceH2: 'Five free searches. Then unlimited.',
+      priceMonth: '/ month', priceSub: 'Unlimited search, price-drop alerts, and the same neutral ranking. Cancel anytime — no lock-in.',
+      priceCta: 'Start for $1 / month', priceCta2: 'See how it works', priceFine: 'Billed in USD. KWD prices shown in-app — no FX surprises.',
+      footer: '© 2026 BestOffers · Kuwait · We don\u2019t sell — we find.',
+    };
+
+    const AR = {
+      navCta: 'حمّل التطبيق', navLinks: ['المنتج', 'كيف يعمل', 'الفئات', 'الاشتراك'],
+      heroBadge: 'مرشد العروض الذكي في الكويت',
+      heroH1: 'اسأل بلهجتك — نجيبك بأفضل سعر في الكويت، مرتّب بأمانة.',
+      heroSub: 'بست أوفرز يفهم لهجتك الكويتية والخليجية، يسأل أسئلة دقيقة قليلة، ثم يقارن العروض الحيّة عبر المتاجر وإنستقرام — ويعرض لك الأفضل، مع السبب.',
+      appStoreTop: 'حمّل من', googlePlayTop: 'احصل عليه من',
+      heroTrust: 'بلا إعلانات · بلا عمولات مخفية · فقط أفضل سعر',
+      mockEyebrow: 'أفضل سعر', mockQuery: 'آيفون 17 Pro Max · 512GB',
+      mockVerdict: 'أفضل عرض', mockReason: 'أوفر بـ 18.000 د.ك من المتوسط',
+      mockProduct: 'آيفون 17 Pro Max 512GB', mockWhy: '512GB أسود — مطابق',
+      mockRows: [{ provider: 'Eureka', price: '419.000' }, { provider: 'Best Al-Yousifi', price: '425.000' }],
+      trustItems: ['بلا إعلانات مدفوعة', 'بلا عمولات مخفية', 'ترتيب محايد', 'أسعار حقيقية فقط'],
+      dealEyebrow: 'الوعد', dealH2: 'المكان الوحيد الذي يجد أفضل صفقة لك — لا لتاجر.',
+      deals: [
+        { icon: I.deal, title: 'أفضل صفقة', body: 'نتائج صادقة ومرتّبة عبر كل المزوّدين — مع سبب «لماذا هذا العرض» مبني على ما طلبته بالضبط.' },
+        { icon: I.ai, title: 'ذكاء اصطناعي', body: 'يفهم اللهجة الكويتية والخليجية والنيّة. يوضّح قبل البحث — لا بعده — لتكون النتيجة دقيقة.' },
+        { icon: I.shield, title: 'موثوق ومحايد', body: 'بلا سلّة، بلا إعلانات، بلا دفع. نحن الطبقة المحايدة فوق كل متجر وتطبيق توصيل — لسنا متجراً.' },
+      ],
+      howEyebrow: 'كيف يعمل', howH2: 'من جملة إلى حكم نهائي، خلال ثوانٍ.',
+      steps: [
+        { num: '01', title: 'قل ما تريد', body: 'اكتب بلهجتك أو بالإنجليزية أو الاثنين. بلا فلاتر.' },
+        { num: '02', title: 'أجب بسرعة', body: 'أسئلة دقيقة حسب القطاع — اضغط زراً أو تخطَّ. ذكاء لا استجواب.' },
+        { num: '03', title: 'نقارن', body: 'عروض حيّة عبر المتاجر المحلية وإنستقرام، مرتّبة بحياد.' },
+        { num: '04', title: 'الحكم', body: 'أفضل سعر يفوز بشريط ذهبي — مع سبب فوزه.' },
+      ],
+      sigBadge: '✦ اللحظة المميّزة',
+      sigH2: 'حكم أفضل سعر.',
+      sigBody: 'عند ظهور النتائج، يفوز العرض الأعلى بشريط ذهبي وسبب من سطر واحد مبني على نيّتك. اللحظة التي تنتهي فيها المقارنة — وترى لماذا فاز هذا.',
+      sigPoints: ['سبب مبني على ما طلبته فعلاً', 'الذهبي يعني جودة السعر — لا صياح ترويجي', 'ترتيب محايد وحتمي بلا أي تمويل'],
+      sigVerdict: 'أفضل عرض', sigReason: 'أوفر بـ 18.000 د.ك من المتوسط',
+      sigCaption: 'الذهبي يظهر هنا وعلى السعر — ولا يحمل هذا الوزن في أي مكان آخر.',
+      catEyebrow: 'الفئات', catH2: 'ثلاث فئات متاحة اليوم. والمزيد قادم.',
+      categories: [
+        { name: 'الإلكترونيات', icon: I.phone, active: true, tag: 'متاح' },
+        { name: 'الطعام', icon: I.food, active: true, tag: 'متاح' },
+        { name: 'العقارات', icon: I.home, active: true, tag: 'متاح' },
+        { name: 'الأثاث', icon: I.sofa, soon: true, tag: 'قريباً' },
+        { name: 'السيارات', icon: I.car, soon: true, tag: 'قريباً' },
+      ],
+      priceEyebrow: 'الاشتراك', priceH2: 'خمس عمليات بحث مجانية. ثم بلا حدود.',
+      priceMonth: '/ شهرياً', priceSub: 'بحث بلا حدود، تنبيهات انخفاض السعر، ونفس الترتيب المحايد. ألغِ متى شئت — بلا التزام.',
+      priceCta: 'ابدأ بـ $1 شهرياً', priceCta2: 'شاهد كيف يعمل', priceFine: 'يُحصّل بالدولار الأمريكي. الأسعار بالدينار داخل التطبيق — بلا مفاجآت صرف.',
+      footer: '© 2026 بست أوفرز · الكويت · نحن لا نبيع — نحن نجد.',
+    };
+
+    const t = lang === 'ar' ? AR : EN;
+
+    t.categories = t.categories.map((c) => ({
+      ...c,
+      style: (c.active
+        ? 'background:var(--canvas);border:1px solid var(--border);box-shadow:0 12px 30px -22px rgba(0,0,0,.35)'
+        : 'background:var(--canvas);border:1px dashed var(--border-strong);opacity:.8') +
+        ';border-radius:18px;padding:24px 18px;text-align:center',
+      iconWrap: (c.active
+        ? 'background:var(--teal-soft);color:var(--teal)'
+        : 'background:var(--surface);color:var(--border-strong)') +
+        ';width:50px;height:50px;border-radius:14px;display:grid;place-items:center;margin:0 auto',
+    }));
+
+    return {
+      t, dir: lang === 'ar' ? 'rtl' : 'ltr',
+      navLinks: t.navLinks,
+      langToggleLabel: lang === 'ar' ? 'EN' : 'عربي',
+      toggleLang: () => this.toggleLang(),
+    };
+  }
+}
+</script>
+</body>
+</html>

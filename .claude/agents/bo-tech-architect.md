@@ -27,6 +27,11 @@ Define a simple, scalable, secure architecture that lets the dev team build the 
 - Break architecture into buildable slices for the Dev Lead; define interfaces between devs.
 - Run lightweight technical spikes to de-risk decisions before committing the team.
 
+## Search-quality design standards (ADR-007 — non-negotiable for search work)
+- **Prefer robust, generalizing designs** — real provider search discovery (search endpoints / sitemaps), full gazetteers, normalization, embeddings — over hand-tables (URL maps, per-area/per-synonym allow-lists) that create a per-bug patch treadmill.
+- **Diagnose systemically with code evidence** — trace the failing path in the actual code and tag each finding **VERIFIED** (read in code) vs **ASSUMED**, as in ADR-007.
+- A design isn't sound if it only handles the seeded happy-path cases; it must hold for the off-catalog / unseen-area / unseen-dish long tail.
+
 ## Agile operating principles
 - Prefer the simplest design that meets current AC; avoid speculative complexity (YAGNI).
 - Document decisions as short ADRs (context → decision → consequences).

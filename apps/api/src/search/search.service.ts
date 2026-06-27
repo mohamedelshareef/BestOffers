@@ -1,6 +1,7 @@
-import { Inject, Injectable, NotFoundException } from '@nestjs/common';
+import { Inject, Injectable, Logger, NotFoundException } from '@nestjs/common';
 import {
   AnswerRequest,
+  ClarifierQuestion,
   formatFils,
   IntentRequest,
   ResultCard,
@@ -23,7 +24,6 @@ import { QuotaService } from '../quota/quota.service';
 import { PaywallException } from './paywall.exception';
 import {
   CLARIFIER_SETS,
-  ClarifierDimension,
   MIN_CLARIFIER_QUESTIONS,
   PreResolveContext,
   toQuestion,
@@ -44,8 +44,17 @@ export const MAX_CLARIFIER_QUESTIONS = MIN_CLARIFIER_QUESTIONS;
  */
 export const EXPLAIN_TOP_N = Number(process.env.EXPLAIN_TOP_N ?? 8);
 
+/**
+ * SPEED bound for the SMART per-query clarifier generation (RULE-10). Claude (Haiku) proposes the
+ * tailored ≥5 set; if it doesn't answer within this budget we fall back to the deterministic config
+ * set so the user never waits. Override with CLARIFIER_GEN_TIMEOUT_MS.
+ */
+export const CLARIFIER_GEN_TIMEOUT_MS = Number(process.env.CLARIFIER_GEN_TIMEOUT_MS ?? 12000);
+
 @Injectable()
 export class SearchService {
+  private readonly logger = new Logger(SearchService.name);
+
   constructor(
     @Inject(CLAUDE_CLIENT) private readonly claude: ClaudeClient,
     private readonly offers: OffersService,
@@ -56,12 +65,23 @@ export class SearchService {
 
   /** POST /search/intent — opens a session, runs the first clarifier step. */
   async startIntent(req: IntentRequest, pseudoId: string, userId?: string): Promise<SearchResponse> {
-    const clar = await this.claude.clarify({
+    // SPEED: kick off intent-normalization AND the SMART clarifier-set generation IN PARALLEL — they
+    // are independent fast-model calls, so the clarifier phase pays ONE Haiku round-trip, not two
+    // sequential ones. The smart set is generated from the RAW intent + sector (it doesn't need the
+    // normalized output); pre-resolved dimensions are deduped post-hoc against the normalized intent.
+    const clarP = this.claude.clarify({
       intentRaw: req.intentRaw,
       sector: req.sector,
       locale: req.locale,
       askedDimensions: [],
     });
+    const setP = this.generateClarifierSet({
+      intentRaw: req.intentRaw,
+      sector: req.sector,
+      locale: req.locale,
+      alreadyResolved: [], // deduped against the resolved intent below
+    });
+    const [clar, generated] = await Promise.all([clarP, setP]);
 
     const session = this.sessions.create({
       pseudoId,
@@ -75,6 +95,13 @@ export class SearchService {
     // RULE-7: dimensions the user already stated in free-text intent are PRE-RESOLVED and count toward
     // the ≥5 without being re-asked. Mark them now so the gate doesn't interrogate what's already known.
     this.markPreResolved(session);
+
+    // OWNER DIRECTIVE 2026-06-27: store the SMART, query-specific set tailored to THIS exact item — NOT
+    // the generic per-sector list. Drop any generated dim that collides with a now-known pre-resolved
+    // dimension (RULE-7). undefined when Claude failed/timed out/returned < floor → the gate falls back
+    // to the deterministic config set (`clarifier-sets.ts`), so it never breaks the flow.
+    session.generatedQuestions = this.reconcileGenerated(generated, this.preResolvedDimensions(session));
+    this.sessions.save(session);
 
     // No PII: only normalized category + pseudoId are logged (S1-4 privacy wall).
     this.events.log({
@@ -118,14 +145,13 @@ export class SearchService {
    * search. Skipping widens an axis but still counts toward the 5 and never short-circuits (RULE-4).
    */
   private async advance(session: SearchSession): Promise<SearchResponse> {
-    const dims = CLARIFIER_SETS[session.sector] ?? [];
     const presented = this.presentedCount(session); // pre-resolved + already-asked (RULE-7 + RULE-4)
     const total = Math.max(MIN_CLARIFIER_QUESTIONS, this.preResolvedDimensions(session).length);
 
     // Search ONLY dispatches once the floor is met (RULE-1). Until then, present the next dimension
     // that is neither pre-resolved nor already asked.
     if (presented < MIN_CLARIFIER_QUESTIONS) {
-      const next = this.nextDimension(session, dims);
+      const next = this.nextQuestion(session);
       if (next) {
         session.askedDimensions.push(next.dimension);
         // "N of total" counts PRESENTED dimensions (asked + pre-resolved) so a fully-specified intent
@@ -136,17 +162,105 @@ export class SearchService {
         return {
           searchSessionId: session.id,
           state: 'clarifying',
-          questions: [toQuestion(next)],
+          questions: [next],
           clarifierCount: session.clarifierCount,
           totalQuestions: total,
         };
       }
-      // No more configured dimensions to present but floor not reached (sector set < 5 — config error
-      // we don't want to dead-loop on): fall through to search rather than hang.
+      // No more questions to present but floor not reached (set < 5 — a config/generation edge we
+      // don't want to dead-loop on): fall through to search rather than hang.
     }
 
     // Floor met (or no more questions available) → dispatch to providers (RULE-4: skip-all still searches).
     return this.runSearch(session);
+  }
+
+  /**
+   * Generate the SMART, query-specific clarifier set (OWNER DIRECTIVE 2026-06-27) from the raw intent.
+   * Returns the raw tailored list (or [] on failure/timeout); the caller reconciles it against the
+   * resolved pre-known dimensions and the ≥5 floor. Bounded by CLARIFIER_GEN_TIMEOUT_MS so a slow/hung
+   * model never blocks the user — on timeout/throw it resolves to [] (→ deterministic config fallback).
+   */
+  private async generateClarifierSet(input: {
+    intentRaw: string;
+    sector: string;
+    locale: SearchSession['locale'];
+    alreadyResolved: string[];
+  }): Promise<ClarifierQuestion[]> {
+    try {
+      const generated = await this.withTimeout(
+        this.claude.clarifierSet({
+          intentRaw: input.intentRaw,
+          sector: input.sector,
+          locale: input.locale,
+          minQuestions: MIN_CLARIFIER_QUESTIONS,
+          alreadyResolved: input.alreadyResolved,
+        }),
+        CLARIFIER_GEN_TIMEOUT_MS,
+      );
+      return (generated ?? []).map((q) => ({
+        dimension: q.dimension,
+        textAr: q.textAr,
+        textEn: q.textEn,
+        chips: q.chips,
+      }));
+    } catch (err) {
+      this.logger.warn(`clarifierSet generation failed (${(err as Error).message}) → config fallback`);
+      return [];
+    }
+  }
+
+  /**
+   * Reconcile a raw generated set with the now-known pre-resolved dimensions (RULE-7) + the ≥5 floor.
+   * Drops dims that collide with a pre-resolved one, dedupes, and only TRUSTS the smart set when it can
+   * still carry the floor (need = 5 − pre-resolved). Otherwise returns undefined → config fallback (we
+   * never serve a half-smart / half-config set). When intent already covers the floor, no smart set is
+   * needed (undefined → config, which the gate skips down to the search anyway).
+   */
+  private reconcileGenerated(
+    generated: ClarifierQuestion[],
+    alreadyResolved: string[],
+  ): ClarifierQuestion[] | undefined {
+    const need = Math.max(0, MIN_CLARIFIER_QUESTIONS - alreadyResolved.length);
+    if (need === 0) return undefined;
+
+    const resolvedSet = new Set(alreadyResolved.map((d) => d.toLowerCase()));
+    const seen = new Set<string>();
+    const clean: ClarifierQuestion[] = [];
+    for (const q of generated) {
+      const dim = q.dimension.toLowerCase();
+      if (resolvedSet.has(dim) || seen.has(dim)) continue;
+      seen.add(dim);
+      clean.push(q);
+    }
+    if (clean.length >= need) {
+      this.logger.log(`clarifierSet smart=ON dims=[${clean.map((q) => q.dimension).join(',')}]`);
+      return clean;
+    }
+    this.logger.log(`clarifierSet smart=OFF (only ${clean.length}/${need}) → config fallback`);
+    return undefined;
+  }
+
+  private withTimeout<T>(p: Promise<T>, ms: number): Promise<T> {
+    let timer: NodeJS.Timeout;
+    const timeout = new Promise<T>((_, reject) => {
+      timer = setTimeout(() => reject(new Error(`clarifier-gen timeout ${ms}ms`)), ms);
+      timer.unref?.(); // don't keep the event loop alive on this guard timer
+    });
+    return Promise.race([p, timeout]).finally(() => clearTimeout(timer));
+  }
+
+  /** The next question to present — from the smart generated set when present, else the config set. */
+  private nextQuestion(session: SearchSession): ClarifierQuestion | undefined {
+    const pre = new Set(this.preResolvedDimensions(session));
+    if (session.generatedQuestions?.length) {
+      return session.generatedQuestions.find(
+        (q) => !pre.has(q.dimension) && !session.askedDimensions.includes(q.dimension),
+      );
+    }
+    const dims = CLARIFIER_SETS[session.sector] ?? [];
+    const next = dims.find((d) => !pre.has(d.dimension) && !session.askedDimensions.includes(d.dimension));
+    return next ? toQuestion(next) : undefined;
   }
 
   /** Distinct dimensions PRESENTED to the user: pre-resolved from intent + explicitly asked (RULE-7). */
@@ -154,12 +268,6 @@ export class SearchService {
     const pre = this.preResolvedDimensions(session);
     const set = new Set([...pre, ...session.askedDimensions]);
     return set.size;
-  }
-
-  /** The next config dimension to ask: not pre-resolved, not already asked, in broad→narrow order. */
-  private nextDimension(session: SearchSession, dims: ClarifierDimension[]): ClarifierDimension | undefined {
-    const pre = new Set(this.preResolvedDimensions(session));
-    return dims.find((d) => !pre.has(d.dimension) && !session.askedDimensions.includes(d.dimension));
   }
 
   /** Dimensions the user's free-text intent already resolved (RULE-7) — counted, never re-asked. */
@@ -427,6 +535,18 @@ export class SearchService {
       if (!session.intentNormalized.model || !session.intentNormalized.model.trim()) {
         session.intentNormalized.model = session.intentRaw.trim();
       }
+      return;
+    }
+    // ELECTRONICS (ADR-007 Q1): catalog-free discovery searches the providers on the intent's query
+    // text. Claude normally fills `model`, but for an off-catalog item it may leave it blank (the
+    // "Dish washing Machine" class) — guarantee the raw query is carried so the real provider search
+    // still runs. Only seed it when LIVE_FETCH is on (the catalog-free path); offline (LIVE_FETCH=off)
+    // keeps the strict MOCK_SKUS model-identity matching used by the precision specs.
+    if (
+      process.env.LIVE_FETCH !== 'off' &&
+      (!session.intentNormalized.model || !session.intentNormalized.model.trim())
+    ) {
+      session.intentNormalized.model = session.intentRaw.trim();
     }
   }
 
@@ -445,9 +565,14 @@ export class SearchService {
     // `intent.model` (the discovery term). Fold a `dish`/`area` answer into the model text so a chip
     // answer measurably TIGHTENS the result set (RULE-3/5), not just sits in constraints. Skipping an
     // axis (answer null) never reaches here, so a skip leaves the term unchanged = widened (RULE-4).
+    // Generated smart sets use query-specific keys (e.g. food `rice_dish`/`protein`, RE `area`); fold
+    // any of these dish/area-like answers into the discovery term too so a smart-set answer tightens
+    // the result set, exactly like the config `dish`/`area` dimensions do.
+    const foodQueryDims = ['dish', 'rice_dish', 'protein', 'cuisine'];
+    const realestateQueryDims = ['area', 'neighborhood', 'location'];
     const foldsIntoQuery =
-      (session.sector === 'food' && dimension === 'dish') ||
-      (session.sector === 'realestate' && dimension === 'area');
+      (session.sector === 'food' && foodQueryDims.includes(dimension)) ||
+      (session.sector === 'realestate' && realestateQueryDims.includes(dimension));
     if (foldsIntoQuery && answer && answer !== '__skip__') {
       const base = (session.intentNormalized.model ?? session.intentRaw ?? '').trim();
       // append the chip term if it isn't already in the query (avoid "rice rice")

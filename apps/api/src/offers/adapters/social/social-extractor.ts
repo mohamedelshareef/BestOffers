@@ -18,11 +18,24 @@ export interface FoodExtract {
   restaurant: string;
 }
 
-/** Real-estate extraction (ADR-006 §2a). rentFils null unless a rent literally appears in the caption. */
+/** Real-estate tenure: a flat is offered for monthly RENT or for SALE (تمليك / للبيع). */
+export type Tenure = 'rent' | 'sale';
+
+/**
+ * Real-estate extraction (ADR-006 §2a). priceFils null unless a price literally appears in the caption.
+ *  - `tenure`: 'rent' (للإيجار) | 'sale' (للبيع/تمليك) | null when the caption does not state it.
+ *  - `priceFils`: the listed price (monthly rent OR sale price per `tenure`/`priceUnit`); null on DM.
+ *  - `priceUnit`: 'month' for a monthly rent, 'total' for a sale/lump price; null when unstated.
+ * `rentFils` is kept as a backward-compatible alias of priceFils (older callers); prefer priceFils.
+ */
 export interface RealEstateExtract {
   isOffer: boolean;
+  tenure: Tenure | null;
   area: string | null;
   rooms: number | null;
+  priceFils: number | null;
+  priceUnit: 'month' | 'total' | null;
+  /** @deprecated alias of priceFils — kept so existing callers compile. */
   rentFils: number | null;
   furnished: 'furnished' | 'semi' | 'unfurnished' | null;
 }

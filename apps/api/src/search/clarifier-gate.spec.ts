@@ -43,6 +43,9 @@ const passiveClaude: ClaudeClient = {
   async clarify() {
     return { intentNormalized: { constraints: {} }, needClarification: false };
   },
+  async clarifierSet() {
+    return []; // no smart set → deterministic config fallback (the ≥5 gate under test)
+  },
   async explainRanking() {
     return [];
   },

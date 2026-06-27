@@ -6,6 +6,13 @@
 
 ## Current state
 - Authored design-revamp brief `ClaudCodeDesign.md` at REPO ROOT (for "Claude Design"). I wrote [MARKETING] §1–§6 + §11.1; bo-ux-lead completes §7–§10, §12, §11.2.
+- Reviewed Claude Design REVAMP outputs (`ClaudeDesigne/*.dc.html`: Revamp index, Prototype, Landing, App Store) — review at `team/marketing/claude-design-review.md`. Verdict: **strong ADOPT, 2 BLOCKERS**.
+
+## Claude Design revamp review (durable)
+- **On-brand & adopt:** palette exact to v2 tokens; gold discipline correct (price+verdict only); verdict-ribbon signature nailed; neutrality markers + AR-first/RTL + Western numerals truthful; IG price-on-request non-gold & truthful; copy verbatim-aligned to brand §1–§2; distinctive vs all 3 anti-reference looks.
+- **BLOCKER 1 (fonts):** all 4 files load Plus Jakarta Sans + Tajawal, NOT brand-mandated Rubik + IBM Plex Sans Arabic. Revamp index even mislabels itself ("Rubik/IBM Plex" in system panel). Fix = swap @import + --disp/--body, bind display headings to --disp. Owner: bo-dev-lead.
+- **BLOCKER 2 (truthfulness):** App Store stats strip fabricates 4.9 rating / 2.3K ratings / #1 Shopping / "4+ Years Old" on an unlaunched app. Fix = truthful pre-launch facts only; reword age. Owner: bo-content-creator.
+- **Confirm w/ PO:** $1/mo is real committed price; whether mockup screenshots (fictional iPhone 17, sample providers) ship to live store or get real-product captures.
 
 ## Key decisions / durable facts
 - **Positioning** (VERIFIED, brand §1.2): "The one place in Kuwait that finds the best deal for you — not for a retailer."

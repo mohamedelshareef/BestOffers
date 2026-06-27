@@ -8,6 +8,7 @@ import { BlinkAdapter } from './adapters/blink.adapter';
 import { EurekaAdapter } from './adapters/eureka.adapter';
 import { TalabatAdapter } from './adapters/talabat.adapter';
 import { LiveOfferResolver } from './adapters/live-resolver';
+import { ElectronicsOfferResolver } from './adapters/electronics-resolver';
 import { FoodOfferResolver } from './adapters/food-resolver';
 import { SocialIngestAdapter } from './adapters/social/social-ingest.adapter';
 import { SocialOfferResolver } from './adapters/social/social-resolver';
@@ -51,6 +52,9 @@ export class OffersService {
   ];
   private cache: OfferCache = new InMemoryOfferCache();
   private resolver = new LiveOfferResolver(this.adapters, this.cache);
+  // ADR-007 Q1: catalog-free electronics discovery (real provider search → synthesized SKUs).
+  // Used when LIVE_FETCH=on; the MOCK_SKUS path below is the offline/test fallback (LIVE_FETCH=off).
+  private electronicsResolver = new ElectronicsOfferResolver(this.adapters, this.cache);
   private foodResolver = new FoodOfferResolver(this.foodAdapters, this.cache);
   private socialResolver = new SocialOfferResolver(this.socialAdapters, this.cache);
 
@@ -62,6 +66,7 @@ export class OffersService {
     this.cache = cache;
     this.adapters = adapters;
     this.resolver = new LiveOfferResolver(adapters, cache);
+    this.electronicsResolver = new ElectronicsOfferResolver(adapters, cache);
     return this;
   }
 
@@ -99,6 +104,21 @@ export class OffersService {
         this.resolveSocial(intent, 'food'),
       ]);
       return [...talabat, ...social];
+    }
+
+    // ELECTRONICS (everything else). ADR-007 Q1: when LIVE_FETCH=on, discovery is CATALOG-FREE —
+    // call the providers' real search with the query text and synthesize a SKU/offer per live hit, so
+    // ANY product the providers sell is searchable (the "Dish washing Machine" → 0 results bug). The
+    // in-code MOCK_SKUS is only a fixture/offline fallback (LIVE_FETCH=off) or a safety net if the live
+    // search returns nothing (e.g. a seeded model with no live hit this run).
+    if (this.liveEnabled) {
+      let live: ResolvedOffer[] = [];
+      try {
+        live = await this.electronicsResolver.resolve(intent);
+      } catch {
+        live = []; // never block the query on the live layer
+      }
+      if (live.length > 0) return live;
     }
     return this.resolveForSkus(intent, this.matchSkus(intent));
   }

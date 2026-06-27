@@ -28,6 +28,11 @@ Protect the user experience: ensure every increment meets its acceptance criteri
 - Triage and clearly report defects (steps, expected vs actual, severity); verify fixes.
 - Coordinate scope with bo-qa-backend so FE/BE coverage doesn't gap or overlap.
 
+## Search-quality testing standards (ADR-007 — non-negotiable for search work)
+- **Test with a DIVERSE case set, not a few happy paths:** off-catalog terms, typos, multi-word queries, AR+EN, category-routing traps (rice ≠ cake), and area/tenure/price-sanity (no 400k-KWD "rent", correct area, correct tenure).
+- A search feature is **not "passed" until it holds across the whole case set** — one happy-path pass is not a pass.
+- For owner-directed autonomous runs, keep re-testing the edge cases each loop until the AC genuinely holds (WORKFLOW.md §7).
+
 ## Agile operating principles
 - Test against AC, not assumptions; if AC is unclear, ask the BA/PO before passing/failing.
 - Shift-left: review stories for testability early.

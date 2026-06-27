@@ -115,6 +115,52 @@ describe('FoodOfferResolver (ADR-005 Slice F-1)', () => {
     expect(names).toContain('French Fries — Burger King'); // whole menu kept, not just "burger"-named items
   });
 
+  // ── OWNER BUG (2026-06-27): "Chilled with rice" → 274 unrelated sauces from "Test Burger King" ──
+  // The killer: a DISH token ("rice") happens to appear in SOME discovered slug ("rice-house"), which
+  // wrongly flipped the WHOLE query to restaurant-mode → the menu was dumped UNFILTERED. Plus a seeded
+  // "Test Burger King" vendor + condiment-only sections leaked into live results.
+  it('OWNER BUG: "Chilled with rice" returns ONLY rice dishes — no sauces, no Test vendor, no dump', async () => {
+    class FakeBugMenu implements ProviderAdapter {
+      providerId = 'prov_talabat'; providerName = 'Talabat'; sector = 'food' as const;
+      tier = 'http' as const; enabled = true;
+      async discover(_q: DiscoveryQuery, _c: FetchCtx): Promise<ProductRef[]> {
+        // 'rice-house' contains the dish token "rice" (the trap); 'test-burger-king' is a seed vendor.
+        return [
+          { url: 'menu#slug=test-burger-king', handle: 'test-burger-king' },
+          { url: 'menu#slug=burger-king', handle: 'burger-king' },
+          { url: 'menu#slug=rice-house', handle: 'rice-house' },
+        ];
+      }
+      async fetch(ref: ProductRef, _c: FetchCtx): Promise<RawPage> {
+        return { url: ref.url, json: { handle: ref.handle }, fetchedAt: 'T' };
+      }
+      async extract(raw: RawPage): Promise<NormalizedOffer[]> {
+        const slug = (raw.json as any).handle;
+        if (slug === 'burger-king') {
+          return [
+            mk('Fiery Sauce — Burger King', 'Sauces', 250),
+            mk('Garlic Mayo — Burger King', 'Sauces', 250),
+            mk('BBQ Sauce — Burger King', 'Sauces', 250),
+            mk('Whopper — Burger King', 'Burgers', 2950),
+          ];
+        }
+        if (slug === 'rice-house') return [mk('Chicken Rice Bowl — Rice House', 'Rice', 1500)];
+        return [mk('Should-Not-Appear — Test Burger King', 'Sauces', 250)]; // seed vendor (filtered at discovery)
+      }
+      health(): AdapterHealth { return { lastOkAt: null, consecutiveFailures: 0 }; }
+    }
+    const r = new FoodOfferResolver([new FakeBugMenu()], new InMemoryOfferCache());
+    const res = await r.resolve({ category: 'food', model: 'Chilled with rice', constraints: {} });
+    const names = res.map((o) => o.sku.canonicalName);
+    expect(names).toContain('Chicken Rice Bowl — Rice House');
+    expect(names).not.toContain('Fiery Sauce — Burger King'); // condiments dropped on a dish query
+    expect(names).not.toContain('Garlic Mayo — Burger King');
+    expect(names).not.toContain('BBQ Sauce — Burger King');
+    expect(names).not.toContain('Whopper — Burger King'); // unrelated dish dropped
+    expect(names.some((n) => /Test Burger King/i.test(n))).toBe(false); // seed vendor excluded
+    expect(res.length).toBeLessThanOrEqual(3); // never a 274-item dump
+  });
+
   it('kill-switch (enabled=false) yields zero offers; a failing adapter degrades to partial []', async () => {
     const off = new FakeTalabat(); off.enabled = false;
     expect(await new FoodOfferResolver([off], new InMemoryOfferCache()).resolve(intent)).toHaveLength(0);

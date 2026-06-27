@@ -32,9 +32,15 @@ export function normalizeFoodText(s: string): string {
  * dish whose name/category contains ANY member is a relevant match. Curated for the Kuwaiti food domain.
  */
 const SYNONYM_GROUPS: string[][] = [
-  // rice / biryani / machboos family
-  ['rice', 'biryani', 'biriyani', 'briyani', 'mandi', 'machboos', 'majboos', 'kabsa', 'maqluba',
-    'رز', 'ارز', 'برياني', 'بريانى', 'مجبوس', 'مكبوس', 'كبسه', 'مندي', 'مقلوبه', 'رزه'],
+  // rice / biryani / machboos / bukhari / mansaf family (the Kuwaiti main-rice block).
+  // OWNER BUG (2026-06-27): "Bukhari food" (رز بخاري) must hit this group so it routes to rice sellers and
+  // its relevance filter drops cakes. Added bukhari/بخاري, mansaf/منسف and the EN spellings of biryani.
+  ['rice', 'biryani', 'biriyani', 'briyani', 'mandi', 'machboos', 'majboos', 'machbous', 'makboos',
+    'kabsa', 'kabseh', 'maqluba', 'bukhari', 'bukhary', 'boukhari', 'mansaf',
+    'رز', 'ارز', 'برياني', 'بريانى', 'مجبوس', 'مكبوس', 'كبسه', 'مندي', 'مقلوبه', 'رزه', 'بخاري', 'منسف'],
+  // grills (mashawi / mishkak / tikka / shish) — a grill query routes to the grill block.
+  ['grill', 'grilled', 'mashawi', 'mashwi', 'mishkak', 'tikka', 'tikkah', 'shish', 'skewer', 'bbq',
+    'مشاوي', 'مشوي', 'مشكاك', 'تكه', 'شواء', 'مشويات', 'مشكك'],
   ['burger', 'برجر', 'برغر', 'همبرجر', 'هامبرجر'],
   ['pizza', 'بيتزا', 'بيزا'],
   ['chicken', 'دجاج', 'جاج', 'فراخ', 'broasted', 'بروست', 'بروستد'],
@@ -51,9 +57,36 @@ const SYNONYM_GROUPS: string[][] = [
   ['fries', 'بطاطس', 'بطاطا', 'potato'],
 ];
 
+/**
+ * Stop-words that carry NO food signal (English connectors + Arabic equivalents). They must never be
+ * treated as a dish token — otherwise "Chilled WITH rice" lets "with"/"chilled" leak into matching and
+ * a free-form phrase wrongly looks unrecognized. They are dropped before expansion/scoring.
+ */
+const STOP_WORDS = new Set<string>([
+  'with', 'and', 'the', 'for', 'plus', 'combo', 'meal', 'set', 'box', 'large', 'small', 'medium',
+  'regular', 'spicy', 'chilled', 'hot', 'cold', 'fresh', 'special', 'classic', 'original', 'value',
+  'مع', 'و', 'في', 'من', 'على', 'بدون', 'حار', 'بارد', 'وجبه', 'كومبو', 'كبير', 'صغير', 'وسط',
+]);
+
+/** Tokenize a query into food-signal tokens (drops stop-words + <2-char fragments). */
+export function foodTokens(query: string): string[] {
+  return normalizeFoodText(query)
+    .split(' ')
+    .filter((t) => t.length >= 2 && !STOP_WORDS.has(t));
+}
+
+/**
+ * Does a single token belong to a recognized food/dish synonym group?
+ * Used to decide whether a slug match is a genuine RESTAURANT name vs a coincidental dish-term match.
+ */
+export function isRecognizedFoodToken(token: string): boolean {
+  const t = normalizeFoodText(token);
+  return SYNONYM_GROUPS.some((g) => g.map(normalizeFoodText).includes(t));
+}
+
 /** Build the set of relevant tokens for a query: each query token + its synonym-group siblings. */
 export function expandFoodQuery(query: string): { terms: Set<string>; matchedGroup: boolean } {
-  const tokens = normalizeFoodText(query).split(' ').filter((t) => t.length >= 2);
+  const tokens = foodTokens(query);
   const terms = new Set<string>();
   let matchedGroup = false;
   for (const tok of tokens) {
@@ -76,6 +109,37 @@ export interface DishCandidate {
   category?: string;
   /** Optional description text. */
   description?: string;
+}
+
+/**
+ * TEST / SEED restaurant guard. Live Talabat data occasionally contains internal test vendors
+ * (e.g. "Test Burger King", "Demo Restaurant", "QA Kitchen"). These must NEVER reach live results.
+ * Matches a leading/standalone test-marker word in the restaurant name OR slug.
+ */
+const TEST_MARKERS = [
+  'test', 'demo', 'sample', 'dummy', 'staging', 'sandbox', 'qa', 'mock', 'placeholder', 'example',
+  'تجريبي', 'تجريبيه', 'تجربه', 'اختبار',
+];
+const TEST_RE = new RegExp(`(^|\\s|[-_])(${TEST_MARKERS.join('|')})(\\s|[-_]|$)`, 'i');
+
+/** True if a restaurant name/slug looks like a non-production test/seed vendor. */
+export function isTestRestaurant(nameOrSlug?: string): boolean {
+  if (!nameOrSlug) return false;
+  return TEST_RE.test(nameOrSlug);
+}
+
+/**
+ * CONDIMENT / ADD-ON guard. Sauces, dips and extras are real menu items but must NOT dominate a
+ * real-dish query (a "rice" search returning "Garlic Mayo" / "BBQ Sauce" is the bug). We rank them
+ * BELOW real dishes; if a dish-term query matches ONLY condiments we treat that as no real match.
+ */
+const CONDIMENT_RE =
+  /\b(sauce|mayo|mayonnaise|ketchup|mustard|dip|dressing|syrup|extra|add[- ]?on|topping|condiment)\b|صوص|مايونيز|كاتشب|كاتشاب|اضافه|اضافات|اضافي|تتبيله|دبس/i;
+
+/** True if a dish looks like a condiment/sauce/add-on rather than a real dish. */
+export function isCondiment(dish: DishCandidate): boolean {
+  const hay = `${dish.title || ''} ${dish.category || ''}`;
+  return CONDIMENT_RE.test(hay);
 }
 
 /**
@@ -115,26 +179,66 @@ function escapeRe(s: string): string {
  *  - otherwise (a dish term like "rice"): keep ONLY dishes that match, ranked by relevance desc.
  * Returns the input items reordered/filtered; never invents.
  */
+/** Hard cap so a no-food-signal query can never dump hundreds of unrelated items. */
+export const FREEFORM_RESULT_CAP = 24;
+
+/**
+ * Helper for the resolver: a dish's title may carry the "— Restaurant" suffix. Extract the restaurant
+ * part (after the em dash) so the test-restaurant guard can inspect it.
+ */
+function restaurantOf(dish: DishCandidate): string {
+  const parts = (dish.title || '').split('—');
+  return parts.length > 1 ? parts.slice(1).join('—') : '';
+}
+
 export function filterDishesByQuery<T extends DishCandidate>(
   items: T[],
   query: string,
   restaurantQuery: boolean,
 ): T[] {
-  if (restaurantQuery) return items;
-  const { terms, matchedGroup } = expandFoodQuery(query);
-  if (terms.size === 0) return items;
+  // STEP 0 — ALWAYS drop test/seed vendors from live results (both restaurant and dish queries).
+  const live = items.filter(
+    (it) => !isTestRestaurant(restaurantOf(it)) && !isTestRestaurant((it as any).restaurant),
+  );
 
-  const scored = items
-    .map((item) => ({ item, score: scoreDish(item, terms) }))
+  // A genuine restaurant query (the user named a real restaurant) keeps the whole menu — but still
+  // demote condiments so a menu isn't fronted by sauces, and still cap nothing (whole menu is wanted).
+  if (restaurantQuery) {
+    return [...live].sort((a, b) => condimentRank(a) - condimentRank(b));
+  }
+
+  const { terms, matchedGroup } = expandFoodQuery(query);
+  if (terms.size === 0) {
+    // No food signal at all (e.g. an empty/garbage query): keep provider order but CAP — never dump hundreds.
+    return [...live].sort((a, b) => condimentRank(a) - condimentRank(b)).slice(0, FREEFORM_RESULT_CAP);
+  }
+
+  const scored = live
+    .map((item) => ({ item, score: scoreDish(item, terms), condiment: isCondiment(item) }))
     .filter((s) => s.score > 0);
 
-  // GRACEFUL FALLBACK: if NOTHING matches the term:
-  //  - a RECOGNIZED dish term (matchedGroup, e.g. "rice"/"burger") that finds 0 matches → genuinely
-  //    empty (the term constrains the result set; better an empty/helpful state than random food).
-  //  - an UNRECOGNIZED free-form query (e.g. "meal prep grill") that finds 0 literal hits → we cannot
-  //    safely constrain it, so keep the provider's ordering rather than nuke every result.
-  if (scored.length === 0) return matchedGroup ? [] : items;
+  // Did any REAL dish (non-condiment) match? A dish-term query that matches only sauces is NOT a real hit.
+  const realHits = scored.filter((s) => !s.condiment);
 
-  scored.sort((a, b) => b.score - a.score);
+  if (realHits.length === 0) {
+    // No real dish matched the term:
+    //  - RECOGNIZED dish term (e.g. "rice"/"burger"): return empty — the term constrains; an empty,
+    //    "broaden your search" state beats dumping random food OR a pile of sauces.
+    //  - UNRECOGNIZED free-form query (e.g. "meal prep grill"): keep provider order but CAPPED, so we
+    //    never dump hundreds of unrelated items (the live "Chilled with rice" → 274 items bug).
+    if (matchedGroup) return [];
+    return [...live].sort((a, b) => condimentRank(a) - condimentRank(b)).slice(0, FREEFORM_RESULT_CAP);
+  }
+
+  // Real dishes matched: rank real dishes ABOVE condiments, then by relevance score desc.
+  scored.sort((a, b) => {
+    if (a.condiment !== b.condiment) return a.condiment ? 1 : -1; // real dishes first
+    return b.score - a.score;
+  });
   return scored.map((s) => s.item);
+}
+
+/** Condiments/add-ons sort after real dishes (0 = real dish, 1 = condiment). */
+function condimentRank(dish: DishCandidate): number {
+  return isCondiment(dish) ? 1 : 0;
 }

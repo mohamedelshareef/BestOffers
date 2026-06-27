@@ -2,7 +2,9 @@ import { Injectable } from '@nestjs/common';
 import { IntentNormalized } from '@bestoffers/shared';
 import {
   ClarifierInput,
+  ClarifierQuestionDraft,
   ClarifierResult,
+  ClarifierSetInput,
   ClaudeClient,
   RankExplanation,
   RankInput,
@@ -43,6 +45,28 @@ export class MockClaudeClient implements ClaudeClient {
       needClarification: true,
       question: this.questionFor(nextDimension),
     };
+  }
+
+  /**
+   * Deterministic stand-in for the SMART per-query clarifier set. Returns a CANNED but genuinely
+   * query-appropriate set so offline/tests prove tailoring works: a laptop query asks use-case/RAM/
+   * screen (NOT phone storage/color); an iPhone query asks storage/color/AppleCare; "rice" asks
+   * which-rice-dish/protein/spice. Returns [] for an unrecognized item → the orchestrator falls back
+   * to the deterministic config set (so behaviour is identical to a real Claude generation failure).
+   */
+  async clarifierSet(input: ClarifierSetInput): Promise<ClarifierQuestionDraft[]> {
+    const t = input.intentRaw.toLowerCase();
+    const resolved = new Set(input.alreadyResolved.map((d) => d.toLowerCase()));
+
+    let set: ClarifierQuestionDraft[] | undefined;
+    if (/laptop|لابتوب|لاب توب|macbook|ماك بوك|notebook/.test(t)) set = MOCK_SETS.laptop;
+    else if (/iphone|آيفون|ايفون/.test(t)) set = MOCK_SETS.iphone;
+    else if (/rice|رز|أرز|برياني|biryani|مجبوس|machboos/.test(t)) set = MOCK_SETS.rice;
+    else if (/شقة|شقه|flat|apartment|للايجار|للإيجار/.test(t)) set = MOCK_SETS.flat;
+
+    if (!set) return []; // unrecognized → caller uses the deterministic config fallback
+    // RULE-7: never re-ask a dimension the intent already resolved.
+    return set.filter((q) => !resolved.has(q.dimension));
   }
 
   async explainRanking(input: RankInput): Promise<RankExplanation[]> {
@@ -192,3 +216,232 @@ export class MockClaudeClient implements ClaudeClient {
     return s.replace(/\b\w/g, (c) => c.toUpperCase());
   }
 }
+
+const ANY = { value: '__skip__', labelAr: 'لا يهم', labelEn: 'Any' };
+
+/**
+ * Canned SMART per-query clarifier sets — deterministic stand-in for Claude's tailored generation.
+ * The KEY proof: a laptop asks use_case/ram/screen (NOT phone storage/color); rice asks rice_dish/
+ * protein/spice. Each set has ≥5 query-specific dimensions. Used offline + by tests/screenshots.
+ */
+const MOCK_SETS: Record<string, ClarifierQuestionDraft[]> = {
+  laptop: [
+    {
+      dimension: 'use_case',
+      textAr: 'لأي استخدام؟',
+      textEn: 'What will you use it for?',
+      chips: [
+        { value: 'gaming', labelAr: 'ألعاب', labelEn: 'Gaming' },
+        { value: 'work', labelAr: 'عمل', labelEn: 'Work' },
+        { value: 'study', labelAr: 'دراسة', labelEn: 'Study' },
+        ANY,
+      ],
+    },
+    {
+      dimension: 'ram',
+      textAr: 'كم الذاكرة (RAM)؟',
+      textEn: 'How much RAM?',
+      chips: [
+        { value: '8GB', labelAr: '8 جيجابايت', labelEn: '8 GB' },
+        { value: '16GB', labelAr: '16 جيجابايت', labelEn: '16 GB' },
+        { value: '32GB', labelAr: '32 جيجابايت', labelEn: '32 GB' },
+        ANY,
+      ],
+    },
+    {
+      dimension: 'screen_size',
+      textAr: 'كم حجم الشاشة؟',
+      textEn: 'Which screen size?',
+      chips: [
+        { value: '13', labelAr: '13 بوصة', labelEn: '13"' },
+        { value: '15', labelAr: '15 بوصة', labelEn: '15"' },
+        { value: '17', labelAr: '17 بوصة', labelEn: '17"' },
+        ANY,
+      ],
+    },
+    {
+      dimension: 'budget',
+      textAr: 'كم ميزانيتك؟ (بالدينار)',
+      textEn: 'What is your budget? (KWD)',
+      chips: [
+        { value: '200', labelAr: 'أقل من 200', labelEn: '< 200 KWD' },
+        { value: '350', labelAr: '200–350', labelEn: '200–350 KWD' },
+        { value: '999', labelAr: '350+', labelEn: '350+ KWD' },
+      ],
+    },
+    {
+      dimension: 'brand',
+      textAr: 'أي ماركة تفضل؟',
+      textEn: 'Preferred brand?',
+      chips: [
+        { value: 'Apple', labelAr: 'Apple', labelEn: 'Apple' },
+        { value: 'Dell', labelAr: 'Dell', labelEn: 'Dell' },
+        { value: 'HP', labelAr: 'HP', labelEn: 'HP' },
+        ANY,
+      ],
+    },
+  ],
+  iphone: [
+    {
+      dimension: 'storage',
+      textAr: 'كم سعة التخزين؟',
+      textEn: 'How much storage?',
+      chips: [
+        { value: '128GB', labelAr: '128 جيجابايت', labelEn: '128 GB' },
+        { value: '256GB', labelAr: '256 جيجابايت', labelEn: '256 GB' },
+        { value: '512GB', labelAr: '512 جيجابايت', labelEn: '512 GB' },
+        ANY,
+      ],
+    },
+    {
+      dimension: 'color',
+      textAr: 'أي لون؟',
+      textEn: 'Which color?',
+      chips: [
+        { value: 'black', labelAr: 'أسود', labelEn: 'Black' },
+        { value: 'white', labelAr: 'أبيض', labelEn: 'White' },
+        { value: 'natural', labelAr: 'طبيعي', labelEn: 'Natural' },
+        ANY,
+      ],
+    },
+    {
+      dimension: 'budget',
+      textAr: 'كم ميزانيتك؟ (بالدينار)',
+      textEn: 'What is your budget? (KWD)',
+      chips: [
+        { value: '200', labelAr: 'أقل من 200', labelEn: '< 200 KWD' },
+        { value: '350', labelAr: '200–350', labelEn: '200–350 KWD' },
+        { value: '999', labelAr: '350+', labelEn: '350+ KWD' },
+      ],
+    },
+    {
+      dimension: 'condition',
+      textAr: 'جديد أو مستعمل؟',
+      textEn: 'New or used?',
+      chips: [
+        { value: 'new', labelAr: 'جديد', labelEn: 'New' },
+        { value: 'used', labelAr: 'مستعمل', labelEn: 'Used' },
+        ANY,
+      ],
+    },
+    {
+      dimension: 'applecare',
+      textAr: 'تريد ضمان AppleCare؟',
+      textEn: 'Want AppleCare?',
+      chips: [
+        { value: 'yes', labelAr: 'نعم', labelEn: 'Yes' },
+        { value: 'no', labelAr: 'لا', labelEn: 'No' },
+        ANY,
+      ],
+    },
+  ],
+  rice: [
+    {
+      dimension: 'rice_dish',
+      textAr: 'أي طبق أرز؟',
+      textEn: 'Which rice dish?',
+      chips: [
+        { value: 'biryani', labelAr: 'برياني', labelEn: 'Biryani' },
+        { value: 'machboos', labelAr: 'مجبوس', labelEn: 'Machboos' },
+        { value: 'rice bowl', labelAr: 'رايس بول', labelEn: 'Rice bowl' },
+        ANY,
+      ],
+    },
+    {
+      dimension: 'protein',
+      textAr: 'أي بروتين؟',
+      textEn: 'Which protein?',
+      chips: [
+        { value: 'chicken', labelAr: 'دجاج', labelEn: 'Chicken' },
+        { value: 'meat', labelAr: 'لحم', labelEn: 'Meat' },
+        { value: 'fish', labelAr: 'سمك', labelEn: 'Fish' },
+        ANY,
+      ],
+    },
+    {
+      dimension: 'spice',
+      textAr: 'درجة البهارات؟',
+      textEn: 'Spice level?',
+      chips: [
+        { value: 'mild', labelAr: 'خفيف', labelEn: 'Mild' },
+        { value: 'medium', labelAr: 'وسط', labelEn: 'Medium' },
+        { value: 'hot', labelAr: 'حار', labelEn: 'Hot' },
+        ANY,
+      ],
+    },
+    {
+      dimension: 'portion',
+      textAr: 'لكم شخص؟',
+      textEn: 'For how many people?',
+      chips: [
+        { value: '1', labelAr: '1', labelEn: '1' },
+        { value: '2', labelAr: '2', labelEn: '2' },
+        { value: '3-4', labelAr: '3–4', labelEn: '3–4' },
+        { value: '5+', labelAr: '5+', labelEn: '5+' },
+      ],
+    },
+    {
+      dimension: 'budget',
+      textAr: 'كم ميزانية الطلب؟ (بالدينار)',
+      textEn: 'Budget for the order? (KWD)',
+      chips: [
+        { value: '5', labelAr: 'أقل من 5', labelEn: '< 5 KWD' },
+        { value: '10', labelAr: '5–10', labelEn: '5–10 KWD' },
+        { value: '999', labelAr: '10+', labelEn: '10+ KWD' },
+      ],
+    },
+  ],
+  flat: [
+    {
+      dimension: 'tenure',
+      textAr: 'إيجار أو تمليك؟',
+      textEn: 'Rent or buy?',
+      chips: [
+        { value: 'rent', labelAr: 'إيجار', labelEn: 'Rent' },
+        { value: 'buy', labelAr: 'تمليك', labelEn: 'Buy' },
+      ],
+    },
+    {
+      dimension: 'bedrooms',
+      textAr: 'كم غرفة نوم؟',
+      textEn: 'How many bedrooms?',
+      chips: [
+        { value: 'studio', labelAr: 'استوديو', labelEn: 'Studio' },
+        { value: '1', labelAr: '1', labelEn: '1' },
+        { value: '2', labelAr: '2', labelEn: '2' },
+        { value: '3+', labelAr: '3+', labelEn: '3+' },
+      ],
+    },
+    {
+      dimension: 'budget',
+      textAr: 'كم الميزانية الشهرية؟ (بالدينار)',
+      textEn: 'Monthly budget? (KWD)',
+      chips: [
+        { value: '250', labelAr: 'أقل من 250', labelEn: '< 250 KWD' },
+        { value: '400', labelAr: '250–400', labelEn: '250–400 KWD' },
+        { value: '999', labelAr: '400+', labelEn: '400+ KWD' },
+      ],
+    },
+    {
+      dimension: 'furnished',
+      textAr: 'مفروشة أو غير مفروشة؟',
+      textEn: 'Furnished or unfurnished?',
+      chips: [
+        { value: 'furnished', labelAr: 'مفروشة', labelEn: 'Furnished' },
+        { value: 'unfurnished', labelAr: 'غير مفروشة', labelEn: 'Unfurnished' },
+        ANY,
+      ],
+    },
+    {
+      dimension: 'amenities',
+      textAr: 'متطلبات: موقف، مصعد، مسبح؟',
+      textEn: 'Parking / elevator / pool?',
+      chips: [
+        { value: 'parking', labelAr: 'موقف', labelEn: 'Parking' },
+        { value: 'elevator', labelAr: 'مصعد', labelEn: 'Elevator' },
+        { value: 'pool', labelAr: 'مسبح', labelEn: 'Pool' },
+        ANY,
+      ],
+    },
+  ],
+};

@@ -28,6 +28,17 @@ Revamped all 15 product agents. Did NOT touch bo-prompt-engineer.md (own file).
 - Most work needed: dev-2/3/4 & ux-designer & brand-designer (vague verification; added screenshot/VERIFIED-vs-ASSUMED); qa-backend & researcher (added explicit "never sign off on unverified" / sourced-claims labeling).
 - Changelog: `team/prompt-engineering-changelog.md`.
 
+## Status — pass 2: search-quality standards (2026-06-27, ADR-007)
+Owner escalation baked into prompts as a role-tuned `## ...standards (ADR-007)` block placed AFTER each agent's Responsibilities (guardrails blocks untouched).
+- bo-dev-lead + dev-2/3/4: real provider/catalog search (not hand-listed URL/mock-SKU maps); relevance must GENERALIZE (normalization/semantic/gazetteer, not per-row hand-tables); verify edge/off-catalog; never absurd price / wrong category / wrong area-tenure.
+- bo-researcher: IG sourcing — followers AND recency/activity; DIRECT sellers not aggregators; per sector+category; DB-import-ready for `tracked_accounts`; GROWABLE; VERIFIED vs CONFIRM (never fabricate handles).
+- bo-qa-lead-frontend + qa-backend: diverse real+edge case set (off-catalog/typos/multi-word/AR+EN/category traps/area-tenure-price-sanity); not passed until holds across the set.
+- bo-tech-architect: prefer generalizing designs over hand-table patch treadmill; diagnose with code evidence (VERIFIED vs ASSUMED).
+- Team note added to WORKFLOW.md §7: owner-directed autonomous runs iterate until AC genuinely holds, don't stop at first green. Prompts point to it, not duplicated.
+- Changelog: pass-2 section in `team/prompt-engineering-changelog.md`.
+
+## Reusable wording standard (apply consistently)
+"REAL provider/catalog search (search endpoints/sitemaps), NOT hand-listed URL maps or mock-SKU lists" · "relevance must GENERALIZE (normalization/semantic/gazetteer), not per-row hand-tables" · "iterate until the AC holds across the case set — don't stop at first green (WORKFLOW.md §7)".
+
 ## Open issues / next
-- WORKFLOW.md already strong; no change needed there.
 - Consider per-role demo-evidence path conventions (where screenshots are stored) if PO wants traceability.

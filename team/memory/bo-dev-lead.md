@@ -2,6 +2,213 @@
 
 > READ at task start. UPDATE at end with durable facts only. Keep lean; prune stale.
 
+## tracked_accounts DB store — IG handles now DB-driven (2026-06-27, 238/238 api, REAL-proven)
+- **GOAL:** persist the IG curated allow-list in the DB by sector/category (keep GROWING it); IG ingestion
+  reads from it instead of the hardcoded `HANDLES_FOOD`/`REALESTATE_HANDLES` dicts.
+- **MIGRATION (both engines):** `db/migrations/0005_tracked_accounts.sql` (SQLite-runner) + `db/postgres/
+  0005_tracked_accounts.sql` (Supabase). Cols: id, handle(UNIQUE), sector(food|realestate CHECK),
+  category, follower_tier, recency, posts_prices, lang, status(verified|confirm|disabled CHECK,
+  DEFAULT confirm), note, added_at, last_seen_at. INDEX (sector, category, status). Idempotent DDL.
+  CATEGORY uses UNDERSCORES in DB/seed (home_meal/meal_prep) vs HYPHENS in code's FoodDishCategory
+  (home-meal/meal-prep) → `normalizeCategory()` bridges (always store/query underscore form).
+- **STORE `offers/adapters/social/tracked-accounts.store.ts` (TrackedAccountsStore over the Db port):**
+  `upsert()` idempotent BY HANDLE (insert→'inserted', existing→'updated', NEVER duplicates; id=`ta_<handle>`,
+  added_at set once). `addTrackedAccount()` = public append, DEFAULTS status='verified' (vetted append goes
+  live); pass status='confirm' for hashtag-discovery finds (staged, NOT live until `promote(handle)`).
+  `verifiedHandles(sector,cat)` / `verifiedForSector(sector)` return ONLY status='verified'. `counts()`
+  groups sector/category/status. `markSeen()` touches last_seen_at.
+- **IMPORT `scripts/import-tracked-accounts.ts` (`importTrackedAccounts(db)` exported):** reads
+  `team/research/ig-accounts-seed.json` (path via IG_SEED_PATH at CALL-TIME so tests use a fixture), upserts
+  each: seed VERIFIED→status='verified' (live), seed CONFIRM→status='confirm' (staged). Prints per-sector/
+  category counts. **REAL RUN (isolated /tmp/bo-tracked-verify.sqlite):** 73 inserted (re-run: 0 ins, 73 upd
+  = idempotent). Counts: food rice 8V/1C, home_meal 2V/2C, grill 8V/2C, meal_prep 18V, dessert 13V, cloud 6V;
+  RE rent 8V/1C, agency 3V, sale 0V/1C.
+- **PROVIDER WIRING (`apify-social-provider.ts`):** `ApifySocialProvider` ctor now takes optional
+  `TrackedAccountsStore`. NEW `resolveHandleTargets(vertical,query)`: if store present → `dbHandles()` (food:
+  `verifiedForSector('food')` ranked into `foodCategoryOrder(query)` so rice query → rice sellers LEAD; RE:
+  all verified RE handles), logs `source=DB`; if DB EMPTY or query throws → hardcoded fallback (the ONLY
+  remaining use of HANDLES_FOOD/REALESTATE_HANDLES) + warn. `routeFoodHandles` refactored to share new
+  EXPORTED `foodCategoryOrder()`. `defaultProvider()` (social-ingest.adapter) builds the store from a
+  `new DbService()` ONLY when SOCIAL_PROVIDER=apify (try/catch → undefined on DB-init fail; mock path
+  untouched, no DB dep). Cost guards (6h cache, monthly cap, perHandle/HashtagLimit) ALL intact.
+- **REAL VERIFIED (compiled provider + DB, fetch mocked to capture Apify body, isolated):** food "rice" →
+  55 verified handles, rice-led (alamir_bukhari,bukhari_kuwait,kabsa.house,machbos_daqoos,maidaalmandi…);
+  confirm rows (kabsawberyeni) EXCLUDED. RE "شقة للايجار السالمية" → all 11 verified RE handles (vs old
+  hardcoded 4); confirm (aqar_kw0) excluded. No-store → hardcoded 4 RE handles (fallback proven).
+- **TESTS +12 (226→238):** `tracked-accounts.store.spec.ts` (idempotent upsert no-dup, @ strip + hyphen→
+  underscore, verifiedHandles gates confirm/disabled, promote, addTrackedAccount verified-default vs confirm,
+  counts; DB-driven selection: food rice-led + confirm gated, RE all-verified, empty-DB fallback, no-store
+  fallback) + `import-tracked-accounts.spec.ts` (VERIFIED→verified/CONFIRM→confirm, idempotent re-import).
+  Specs use REAL in-memory SQLite with migrations applied. RUN: `cd apps/api && npm run migrate` (writes
+  0005), `npx ts-node scripts/import-tracked-accounts.ts` (SQLITE_PATH for isolation). To append live:
+  `store.addTrackedAccount({handle,sector,category})`; hashtag find: `addTrackedAccount({...,status:'confirm'})`.
+- **STILL TODO (ADR-006):** BullMQ delta-pull scheduler maintains last_seen_at + auto-inserts hashtag finds as
+  confirm; admin CRUD UI; legal Meta ToS sign-off (tos_reviewed=false). Pg port not yet pushed to Supabase.
+
+## ADR-007 Q1 — ELECTRONICS CATALOG-FREE discovery (2026-06-27, OWNER, 226/226 api, REAL-proven)
+- **BUG:** electronics "Dish washing Machine" (any non-seeded product) → 0 results. Root cause: electronics
+  lane filtered a 16-item in-code `MOCK_SKUS` (only iPhones/Galaxy/MacBook/Dell); `matchSkus`→[] for anything
+  else short-circuits; `live-resolver` also DROPS hits that don't map to a candidate SKU. Real provider search
+  (Blink suggest.json, Eureka Algolia) was architecturally bypassed off-catalog.
+- **FIX — `ElectronicsOfferResolver` (`offers/adapters/electronics-resolver.ts`, mirrors FoodOfferResolver):**
+  for an electronics intent calls each adapter's REAL search directly with the query text, SYNTHESIZES a
+  `Sku`(category='electronics', id `elec_<slug>`)+`Offer` per live hit (title/price→fils/image/url/stock
+  VERBATIM), groups near-dupes across providers, returns ResolvedOffer[]. allSettled + per-site timeout +
+  ELECTRONICS_TTL cache (`elec:<providerId>:<q>`) + partial results. Does NOT require a MOCK_SKUS match.
+- **WIRING (`offers.service.ts`):** electronics branch — when LIVE_FETCH=on run `electronicsResolver.resolve`;
+  if >0 use it, ELSE fall back to `resolveForSkus(matchSkus)` (MOCK_SKUS = offline/test fixture + safety net).
+  `withLiveLayer` rebuilds the electronics resolver. LIVE_FETCH=off → MOCK_SKUS path only (precision specs
+  depend on it). `search.service.pinIntentToSector`: for electronics, ONLY when LIVE_FETCH!=='off', seed
+  `intent.model = intentRaw` when Claude left model blank (off-catalog class).
+- **fallback.ts:** new `isDiscoveredOffer` — a synthesized electronics offer (`sku.category==='electronics'`)
+  is treated like food/RE discovery (every hit is exact; budget-only exclusion). MOCK_SKUS electronics keep
+  category 'smartphone'/'laptop'/'tv' + strict model-identity matching (Pro≠Pro Max precision specs intact).
+- **RELEVANCE + GROUPING (`offers/adapters/electronics-relevance.ts`, the CORE guards):**
+  - `canonicalizeElectronicsPhrase` PHRASE map — **VERIFIED live: providers index "dishwasher" (one word);
+    "dish washing machine"/"dish washer" → 0 hits.** Map rewrites the DISCOVERY query + normalizes titles
+    (dishwasher/dryer/air conditioner/microwave). Tiny high-freq only (Q4 embeddings = durable generalization).
+  - `scoreProductTitle(title,query,category)` — a hit must satisfy EVERY significant query token (token OR a
+    synonym), matched in TITLE **or the provider CATEGORY PATH** (Eureka `cn`, Blink `product_type` — now
+    surfaced as `attrs.category`). Why "laptop" matches a "MacBook Pro" (no word "laptop" in title; cat="…>
+    Laptops > Note Books"). Drops off-query rows (microwave for a dishwasher query).
+  - `isAccessoryTitle` ACCESSORY guard — a DEVICE query drops case/cover/stand/bag/charger/streaming-stick/
+    keyboard hits (unless the query asked for the accessory). Why "TV"/"iPhone 16" no longer surface cases.
+  - `groupSimilarProducts` — trigram (pg_trgm-style) Jaccard ≥ **0.55** (conservative; default pg_trgm 0.3);
+    same product across X-cite/Blink/Eureka merges to ONE synth SKU carrying every provider's offer; below
+    threshold = separate cards (never a wrong price-compare). `titleSimilarity`/`trigrams` exported.
+- **REAL PROOF (LIVE_FETCH=on, real Blink+Eureka+X-cite, isolated — owner :3000/:8765 untouched, NO git;
+  drove compiled ElectronicsOfferResolver + full OffersService.resolveOffers):**
+  - **"Dish washing Machine" → 7 REAL dishwashers** (Eureka): Bosch Series 6 FreeStanding 365.000, Ariston
+    Built-in 14-Place 250.000, Samsung Freestanding 219.000, Ariston Inverter 202.000, Bosch Series 6 199.900,
+    Samsung DW60M5050FS 159.000, Ariston 13-Place 149.900 KWD — real URLs. **BUG FIXED.**
+  - "TV" → 11 real Samsung/LG QLED/OLED TVs (streaming-stick/keyboard dropped). "washing machine" → 6 real
+    Hitachi/Bosch/Ariston/Panasonic washers (189–365). "iPhone 16" → X-cite 128GB 219.900 + 512GB 399.900 +
+    Blink 16 Pro Max/16e (cases dropped). "laptop" → 5 real Eureka ROG/Omen/MacBook Pro (839–1204) via cat path.
+- **X-cite status (ASSUMED partial):** still the 4-entry iPhone-16 known-URL hand-list (no search/sitemap path
+  spiked — ADR-007 Q2). Contributes only for iPhone-16-class text; 0 for dishwasher/TV/washer/laptop. Blink+
+  Eureka carry off-catalog discovery. NOT a blocker (Q1 done).
+- **DURABLE:** Blink has NO appliances (dishwasher/washer → 0); Eureka (Algolia instant_records) IS the
+  appliance source. Provider category path is the key relevance signal for brand/model-named devices. Eureka
+  query-vs-PDP `name` param can mirror a sibling SKU, but title/price are from the hit itself (truthful).
+  Tests: 226/226 (was 209; +17: electronics-relevance.spec 9, electronics-resolver.spec 5, +3 folded). RUN:
+  `LIVE_FETCH=on` + import compiled `dist/offers/adapters/electronics-resolver.js` with [Xcite,Blink,Eureka].
+
+## RE RENT-vs-SALE + price-sanity FIXED — "300,000 KD rent" bug (2026-06-27, OWNER, 209/209 api)
+- **BUG (live):** a RENT flat card showed **300,000 KD** = a SALE price. Root causes (BOTH real): (1) RE
+  extraction had NO tenure field — rent & sale listings were undifferentiated, so a sale leaked into rent
+  results; (2) `parseKwdPrice` regex `(\d+(?:[.,]\d{1,3})?)` mis-parsed "300,000" as `300.000`→**300 KWD**
+  (a grouped-thousands sale price truncated to look like a sane rent). No price-sanity bound existed.
+- **FIX 1 — tenure extraction:** `RealEstateExtract` += `tenure:'rent'|'sale'|null`, `priceFils` (alias of
+  legacy `rentFils`, both kept), `priceUnit:'month'|'total'`. RE_TOOL (anthropic-social-extractor) schema +
+  prompt updated (rent للإيجار / sale للبيع/تمليك; a 100k+ value is a SALE not a monthly rent). Mock extractor
+  `parseTenure` (sale markers WIN over rent) + `parsePriceUnit`.
+- **FIX 2 — KWD number parser (`mock-social-extractor.parseKwdNumber`, EXPORTED+tested):** disambiguates a
+  DECIMAL KWD amount ("12.500"→12.5) from GROUPED THOUSANDS ("300,000"→300000, "1,250,000"→1250000, multi-sep
+  "1.250.000"→1250000). Rule: ≥2 seps = thousands; one comma + exactly-3-trailing = thousands (sale);
+  else decimal fils. `parseKwdPrice` now matches `\d[\d.,]*\d`. `priceLiterallyInCaption` (adapter truthfulness
+  guard) extended with `toLocaleString` candidates so a real 300,000 sale price passes the literal-in-caption check.
+- **FIX 3 — relevance filter (`realestate-relevance.ts`, the CORE guard):** NEW `detectQueryTenure`,
+  `detectOfferTenure` (explicit attr → caption marker), `isSaneMonthlyRent` (band **50,000–3,000,000 fils** =
+  50–3,000 KWD/month; 0=price-on-request OK), `inferTenureFromPrice` (≥10,000 KWD ⇒ sale), `filterFlatsByTenure`,
+  and `filterFlatsByQuery(items, query, {tenure})`. A rent query DROPS sale flats (and vice versa); a rent flat
+  with an out-of-band price is DROPPED. `FlatCandidate` += tenure/priceFils.
+- **FIX 4 — adapter relabel (`social-ingest.adapter.ts` RE branch):** resolves tenure (extraction→caption→price
+  inference); if tenure=rent but price out-of-band → reclassify to sale (if >max) + **zero the price → price-on-
+  request** (NEVER renders an absurd rent number). Sets `attrs.tenure`/`attrs.priceUnit`; title gets "· For rent/
+  For sale". `social-resolver.ts` reads `intent.constraints.tenure` (the rent/buy clarifier; 'buy'→sale) as
+  AUTHORITATIVE, else query text; passes it into the filter (+ reads `sku.attributes.tenure`, `offer.priceFils`).
+- **SEEDS (`mock-social-provider.ts`):** +2 SALE posts — Salmiya 3BR **300,000 د.ك للبيع/تمليك** (the owner's bug
+  case) + Salwa house **450,000 دينار للبيع**. Existing 8 rent seeds (230–600 KWD/month) unchanged + sane.
+- **REAL PROOF (booted API :3303, mock claude/social/extractor, isolated — owner :3000/:8765 untouched, NO git;
+  driver answers the tenure clarifier then skips to results):**
+  - "شقة للايجار السالمية" tenure=rent → **1 card: "1BR · Salmiya · semi · For rent", priceFils=300000 = 300
+    KWD/month** (sane), the 300,000 KWD Salmiya SALE post EXCLUDED. **0 cards with priceFils>3,000,000.** No absurd rent.
+  - "شقة للبيع" tenure=buy → **2 cards: Salmiya 3BR 300,000 KWD + Salwa 450,000 KWD**, both "For sale", rent flats excluded.
+  - Tenure correctly separated both directions.
+- **Tests: 209/209 api (was 185; +24):** realestate-relevance.spec +16 (detectQueryTenure/detectOfferTenure,
+  isSaneMonthlyRent, inferTenureFromPrice, filterFlatsByTenure rent-drops-sale + sale-drops-rent + absurd-rent
+  drop + price-inference, end-to-end area+tenure: rent query for Salmiya excludes the 300k sale). social-ingest
+  .spec +8 (parseKwdPrice grouped-thousands 300,000→300,000,000; parseKwdNumber decimal-vs-thousands; parseTenure;
+  adapter: 300k sale extracted as SALE w/ real price not 300; lying rent@300k → sanitized to price-on-request+sale;
+  RESOLVER rent-السالمية excludes 300k sale; RESOLVER للبيع returns sales). Lying-extractor stub updated to new shape.
+- **DURABLE:** monthly-rent sane band = 50–3,000 KWD (`SANE_RENT_MIN/MAX_FILS`); sale floor = 10,000 KWD
+  (`SALE_PRICE_FLOOR_FILS`). KWD has 3 decimals → "X.500" is decimal, "X,000" (3 after comma) is thousands — never
+  conflate. The tenure filter is the CORE guard; constraints.tenure ('buy'→sale) from the rent/buy clarifier is
+  authoritative over query text. RUN CMD: `cd apps/api && DOTENV_CONFIG_PATH=<repo>/.env CLAUDE_PROVIDER=mock
+  LIVE_FETCH=off SOCIAL_PROVIDER=mock SOCIAL_EXTRACTOR=mock PORT=3303 node -r dotenv/config dist/main.js`; driver
+  posts /search/intent then /search/answer{searchSessionId,dimension,answer} (tenure→rent|buy, else __skip__).
+
+## "Bukhari food" → @layers_kw CAKE bug FIXED — IG category routing + relevance filter (2026-06-27, OWNER, 185/185)
+- **BUG (live):** searching "Bukhari food" (رز بخاري, a RICE dish) returned cake offers from @layers_kw. Root
+  cause: (1) flat bakery-heavy `FOOD_HANDLES` seed, no dish-category routing; (2) IG social offers were filtered
+  for food but the rice SYNONYM_GROUP was MISSING bukhari/بخاري + mansaf/منسف, so a bukhari post didn't expand.
+- **FIX PART 1 — category-routed handles (`apify-social-provider.ts`):** replaced flat FOOD_HANDLES with the
+  researcher's CATEGORY-TAGGED `HANDLES_FOOD: Record<FoodDishCategory, string[]>` (rice/home-meal/grill/meal-prep/
+  dessert/cloud — the [V] seed). NEW `routeFoodHandles(query)` (EXPORTED, unit-tested) maps a query to its dish
+  category via `FOOD_CATEGORY_KEYWORDS` (bukhari/machboos/biryani/kabsa/mandi/mansaf/rz → rice+home-meal;
+  mashawi/grill/mishkak → grill; cake/حلى → dessert; diet/keto → meal-prep; burger/coffee → cloud) and ORDERS the
+  full union so the matching category LEADS (rice query → rice sellers first, NOT @layers_kw). ALWAYS returns the
+  full deduped union — only ORDER changes, no seller dropped. `pullMode(vertical,mode,queryText)` uses
+  routeFoodHandles for food; RE unchanged. Cache still `${vertical}:${mode}` (one Apify run holds all sellers'
+  posts, re-ranked per query). NOTE seed updated: dropped stale bakers (cake_art_kwt/heavenly.cake/itsmesini/…),
+  added rice block (bukhari_kuwait/alamir_bukhari/maidaalmandi/malekalmajbous/machbos_daqoos/manasif_/mansafna_kw/
+  kabsa.house) + home-meal + mishkak_kw/mashawi_alzayn.
+- **FIX PART 2 — relevance filter (the core, `food-relevance.ts`):** the IG food relevance filter was ALREADY
+  wired in `social-resolver.ts` (sector==='food', uses `filterDishesByQuery`). Extended the rice SYNONYM_GROUP:
+  +bukhari/bukhary/boukhari/بخاري, +mansaf/منسف, +machbous/makboos, EN biryani spellings. Added a GRILL group
+  (mashawi/mishkak/tikka/shish/bbq/مشاوي/مشكاك/شواء). So "Bukhari food" expands → rice group → cake/burger/coffee
+  posts score 0 → DROPPED.
+- **REAL PROOF (compiled provider→resolver, SOCIAL_PROVIDER=apify + SOCIAL_EXTRACTOR=anthropic, APIFY_RESULTS_LIMIT
+  =2, isolated — owner :3000 untouched, NO git):** "Bukhari food"/"machboos"/"مجبوس" → routeFoodHandles leads
+  bukhari_kuwait,alamir_bukhari,maidaalmandi… → **0 offers, 0 cake** (raw probe showed the 30 fetched posts DID
+  include @layers_kw cake / @burgerinn / @mug.cr coffee — the filter dropped ALL; rice sellers' live 30d window had
+  no clean priced rice-dish offer at limit=2, so honest EMPTY, NEVER cake). "cake" → dessert block leads → **8 real
+  cake offers** (@layers_kw "Customized cake", @thecakeshop_kuwait, @bakehaus.kuwait, @zahracakes_kwt, @cakentakekw —
+  all price-on-request, real permalinks). Symmetric + correct. CREDIT this verify ≈ 39 handles×2 ≈ <$0.10.
+- **Tests: 185/185 api (was 178; +7):** apify-social-provider.spec +5 (routeFoodHandles: rice query leads rice not
+  bakery, AR machboos/biryani/مندي/منسف route to rice, cake→dessert leads, grill→grill leads, full union preserved);
+  social-ingest.spec +2 (rice query EXCLUDES @layers_kw cake offer + keeps bukhari; cake query symmetric). All other
+  specs untouched + green.
+- **DURABLE:** the IG relevance filter (`social-resolver.ts` food branch) is the CORE guard — keep it. routeFoodHandles
+  only re-orders (rank lead); the filter is what guarantees no cross-category leak. To add a dish category: add a
+  `HANDLES_FOOD` key + a `FOOD_CATEGORY_KEYWORDS` rule + (if a new dish family) a SYNONYM_GROUP in food-relevance.ts.
+
+## SMART per-query clarifier generation (2026-06-27 — OWNER, REAL-proven, 178/178 api)
+- **GOAL:** the ≥5 follow-ups must be SMART + SPECIFIC to the EXACT requested item (Claude-generated),
+  NOT the fixed generic per-sector list. Config sets kept ONLY as deterministic FALLBACK.
+- **NEW interface method `ClaudeClient.clarifierSet(input)`** (`claude-client.interface.ts` +
+  `ClarifierSetInput{intentRaw,sector,locale,minQuestions,alreadyResolved}`) → `ClarifierQuestionDraft[]`.
+  AnthropicClaudeClient impl = Haiku (CLAUDE_CLARIFY_MODEL) forced tool_use `emit_clarifier_set`,
+  **max_tokens 2560** (a tighter cap truncated → stop_reason=max_tokens on busy items like كنب; 2560 fixed
+  it). System prompt = owner's tailoring examples (laptop→use_case/ram/screen; iphone→storage/color/
+  applecare; rice→rice_dish/protein/spice) + HARD no-drift rules (same item only, no upsell, ≥3 chips +
+  "Any/لا يهم", Western numerals, AR-first). Sanitizes/dedupes/drops malformed (chips<2). MockClaudeClient
+  impl = canned `MOCK_SETS` (laptop/iphone/rice/flat) — deterministic, query-appropriate (laptop≠phone),
+  returns [] for unrecognized → exercises the fallback path offline.
+- **search.service wiring:** `startIntent` runs `clarify()` + `generateClarifierSet()` **IN PARALLEL**
+  (Promise.all) — LOAD-BEARING: sequential made clarifierSet start ~6s late and blow the timeout. Bounded
+  `withTimeout(CLARIFIER_GEN_TIMEOUT_MS=12000, unref'd timer + clearTimeout)`. `reconcileGenerated()` drops
+  dims colliding with pre-resolved (RULE-7) + dedupes; TRUSTS the smart set only if `clean.length >= need`
+  (need=5−preResolved) ELSE undefined→config fallback (never half-smart/half-config). Stored on
+  `session.generatedQuestions` (frozen for the multi-turn loop). `nextQuestion(session)` prefers the
+  generated set, else `CLARIFIER_SETS[sector]` config (via toQuestion). `applyAnswer` discovery-fold
+  widened to smart food/RE dim keys (rice_dish/protein/cuisine, area/neighborhood/location) so a smart
+  answer tightens the Talabat/social query, like the config `dish`/`area` dims.
+- **REAL VERIFIED (Haiku live, isolated :3301 — owner :3000 untouched):** laptop→use_case(Gaming/Work/
+  Study/Design)/screen_size(13/14/15/17")/ram(8/16/32/64GB)/brand(Apple/Dell/HP/Lenovo), NO storage/color;
+  iPhone 16→storage/color(Natural Titanium/Blue!)/condition/budget; "chilled with rice"→rice_dish(Machboos/
+  Biryani/Kabsa)/protein/spice_level/portion_size; "flat in Salwa للايجار"→bedrooms/budget/furnished/
+  amenities/floor_type (AR); "كنب"(sofa)→sofa_type/seating_capacity/material(leather/fabric/velvet)/color/
+  budget/features — all tailored, different per item, no drift. FALLBACK proven HTTP: CLARIFIER_GEN_TIMEOUT_
+  MS=1 → "clarifierSet generation failed → config fallback" → config ELECTRONICS set drives the gate, 25
+  cards. Pre-resolved dim (model/dish from raw) makes a specific intent start at Q[2/5] (RULE-7).
+- **Tests +7 `clarifier-smart.spec.ts` (178/178, was 171):** laptop≠phone dims, iphone phone-specific,
+  rice dish-specific, different items diverge, unrecognized→config fallback, clarifierSet THROW→config
+  fallback, smart query still reaches results. All inline ClaudeClient spec stubs got a `clarifierSet`
+  ([] = config fallback): clarifier-gate/clarifier-bound/search-resilience; truthfulness delegates to mock.
+- **DURABLE:** clarify + clarifierSet MUST run in parallel (two sequential Haiku calls blow the budget).
+  max_tokens≥2560 for the set. Keep the config sets — they ARE the fallback and the offline/test path.
+
 ## Current state (after ADR-005 Slice F-1 — FOOD now LIVE via Talabat Tier-1 JSON; fallback spec fixed)
 - **88/88 api tests green** (was 79/81). FOOD ships with ZERO scraping of walled apps (no Jahez/Carriage).
 - **TALABAT adapter LIVE** (`offers/adapters/talabat.adapter.ts`, tier:'http', sector:'food', deterministic
@@ -417,6 +624,32 @@
 - **Phase 2b mobile (mock-first):** expo-router screens login/otp/profile/edit/settings/paywall/subscription;
   N8 QuotaPill + paywall interception + resume. Infra: theme/i18n/locale/secureStorage/session/accountsClient/
   config. `typedRoutes` DISABLED (router.d.ts hand-maintained — add route to the union when adding a screen).
+
+## FOOD "Chilled with rice" → 274 unrelated sauces BUG (2026-06-27 — OWNER, REAL-proven, 171/171 api)
+- **ROOT CAUSE #1 (the dump):** `FoodOfferResolver.queryMatchedRestaurant` used a LOOSE substring slug
+  match over ALL discovered slugs. The resolver over-fetches 6 restaurants for a dish query, so when ANY
+  dish token coincidentally appeared in SOME slug ("rice" in `rice-house`, "chicken" in `chicken-tikka`),
+  the WHOLE query flipped to restaurant-mode → `restaurantQuery=true` → `filterDishesByQuery` returned the
+  ENTIRE unfiltered menu (sauces + everything). "Chilled with rice" → "rice" hit a slug → 274 items dumped.
+  **FIX (`food-resolver.ts`):** a slug match now only counts as RESTAURANT query if the matching token is
+  (a) NOT a recognized food/dish term (`isRecognizedFoodToken`) AND (b) a WHOLE-token slug match (not loose
+  substring). So "kfc"/"burger king"(via "king") = restaurant; "rice"/"chicken"/"Chilled with rice" = dish.
+- **ROOT CAUSE #2 (test/seed + condiments leaking):** "Test Burger King" + condiment-only sections showed.
+  **FIX (`food-relevance.ts`):** `isTestRestaurant()` (TEST_MARKERS test/demo/qa/sample/تجريبي… whole-word,
+  "Contest" safe) — dropped at discovery in resolver AND inside `filterDishesByQuery` (both modes).
+  `isCondiment()` (sauce/mayo/dip/صوص/اضافه…) — condiments rank BELOW real dishes; a dish-term query matching
+  ONLY condiments = no real hit (empty if recognized term, capped free-form otherwise).
+- **ROOT CAUSE #3 (multi-word free-form bypass):** `STOP_WORDS` (with/and/chilled/spicy/مع/و…) + `foodTokens()`
+  so a phrase tokenizes to its food signal ("Chilled with rice"→"rice" recognized). Free-form no-food-signal
+  queries CAPPED at `FREEFORM_RESULT_CAP=24` — NEVER dump hundreds.
+- **REAL PROOF (booted API :3000 LIVE_FETCH=on CLAUDE=anthropic, full HTTP /search/intent→answer):**
+  "Chilled with rice" → **15 cards, ALL real rice/biryani** (Tikka Rice 0.750, White/Saffron Rice 1.100,
+  Chicken Biryani 3.950, Rice Bowls) — **0 sauces, 0 Test-vendor**. "rice"/"برياني" → same set. "chicken" →
+  14 real chicken dishes. Direct resolver probe vs real Talabat identical. The 274-dump is GONE.
+  **Tests: 171/171 api (was 162; +9).** NOTE: real Claude now asks a food "people" clarifier (clarifier-sets
+  .ts, added since prior memory) — skip through to reach results.
+- **DURABLE:** never decide restaurant-vs-dish by loose slug substring — a dish token in an unrelated candidate
+  slug poisons it. Gate on non-food WHOLE-token match. Strip test vendors at source + demote condiments.
 
 ## FOOD SEARCH accuracy + speed fix (2026-06-26 — "rice returns random food" BUG, REAL-proven)
 - **Tests: 131/131 api (was 120; +8 `food-relevance.spec.ts`, +3 `food-resolver.spec.ts`).**

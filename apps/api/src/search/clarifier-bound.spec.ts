@@ -30,6 +30,10 @@ class AdversarialClient implements ClaudeClient {
       question: { dimension: 'storage', textAr: '؟', textEn: '?', chips: [] },
     };
   }
+  // Returns no smart set → the gate falls back to the deterministic config set (the contract under test).
+  async clarifierSet() {
+    return [];
+  }
   async explainRanking() {
     return [];
   }

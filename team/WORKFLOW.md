@@ -58,3 +58,7 @@ INTAKE → DEFINE → DESIGN / ARCHITECT → BUILD → TEST → FIX LOOP → DEM
 ## 6. QA fix loop
 
 QA tests against AC → logs defects (severity + repro) → **Dev fixes HIGH first** → re-test → repeat until pass → PO ratifies. QA never passes a feature whose AC isn't demonstrably met.
+
+## 7. Owner-directed autonomous runs
+
+When the PO hands you an autonomous run, **keep iterating until the AC genuinely holds across the agreed case set — do NOT stop at the first green.** A single happy-path pass is not done. Re-test edge/off-happy-path cases each loop; only hand back when the AC holds for real, or surface a hard blocker to the PO.

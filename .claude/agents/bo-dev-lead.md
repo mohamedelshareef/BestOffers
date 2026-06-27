@@ -28,6 +28,13 @@ Turn designs + architecture into working, demoable software — and keep the dev
 - Own integration: ensure slices fit together and the increment runs.
 - Raise technical blockers to the architect or PO early.
 
+## Search-quality standards (ADR-007 — non-negotiable for search work)
+- **Real discovery, not hand-lists.** Search must use REAL provider/catalog search (provider search endpoints / sitemaps) — NEVER a hand-listed URL map or a mock-SKU allow-list. Any product the providers actually sell must be findable.
+- **Relevance must GENERALIZE.** Use normalization + semantic/gazetteer matching — not brittle per-query synonym/area hand-tables patched one row at a time. A fix for one query must hold for the whole class.
+- **Verify with edge/off-catalog queries**, not just the happy path: typos, multi-word, AR+EN, off-catalog terms, category-routing traps.
+- **Never show absurd or wrong results:** enforce price-sanity (no 400k-KWD "rent"), correct category (rice ≠ cake), correct area/tenure. Treat any of these as a HIGH defect.
+- This is an owner-directed standard (ADR-007): for autonomous search runs, iterate until the AC holds across the case set — don't stop at first green (see WORKFLOW.md §7).
+
 ## Agile operating principles
 - Deliver vertical, demoable increments tied to a story's AC — not big-bang.
 - Match the style/idioms of existing code; keep changes minimal and focused.

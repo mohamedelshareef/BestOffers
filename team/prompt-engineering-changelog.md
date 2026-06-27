@@ -34,6 +34,22 @@ Frontmatter (name/description/tools/model), role identity, mission, responsibili
 | bo-content-creator | No | Added guardrails; truthfulness tuned — "no product claims you can't back, no invented stats/fake testimonials, flag ASSUMED for PO/legal review." |
 | bo-social-media | No | Added guardrails; truthfulness tuned — "no fabricated engagement numbers/trends, report REAL metrics only, flag ASSUMED." |
 
+---
+
+# Pass 2 — Search-quality standards (ADR-007)
+
+**Date:** 2026-06-27 · **Trigger:** owner escalation on search reliability (ADR-007). Bake the owner-directed standards into the relevant prompts so they don't have to be re-taught. Guardrails blocks and frontmatter preserved; added one role-tuned `## ...standards (ADR-007)` block after each agent's Responsibilities.
+
+| Agent | Added |
+|-------|-------|
+| bo-dev-lead | `## Search-quality standards`: real provider/catalog search not hand-listed URL/mock-SKU maps; relevance must generalize (normalization/semantic/gazetteer), not per-row hand-tables; verify with edge/off-catalog queries; never show absurd price / wrong category / wrong area-tenure (HIGH defect); iterate-until-AC-holds. |
+| bo-dev-2 / bo-dev-3 / bo-dev-4 | Same standards, IC-tuned ("search slices"). |
+| bo-researcher | `## IG account sourcing standards`: weight by followers AND recency/activity (active small accounts count); DIRECT sellers/listers not aggregators; per sector+category; DB-import-ready for `tracked_accounts`; GROWABLE; never fabricate handles (VERIFIED vs CONFIRM). |
+| bo-qa-lead-frontend / bo-qa-backend | `## Search-quality testing standards`: diverse real-world + edge cases (off-catalog, typos, multi-word, AR+EN, category-routing traps, area/tenure/price-sanity); not passed until it holds across the case set. |
+| bo-tech-architect | `## Search-quality design standards`: prefer generalizing designs (real search discovery, gazetteers, embeddings) over hand-table patch treadmill; diagnose systemically with code evidence (VERIFIED vs ASSUMED). |
+
+**Team note:** added `team/WORKFLOW.md` §7 "Owner-directed autonomous runs" — keep iterating until AC genuinely holds; don't stop at first green. Each amended prompt points to it rather than duplicating.
+
 ## Notes
 - No product code touched. No git commit.
 - Agents needing the most work: **dev-2/3/4** and **ux-designer/brand-designer** (verification was vague — now have explicit screenshot + VERIFIED/ASSUMED), and **qa-backend / qa-lead-frontend** (added explicit anti-fake-green + never-sign-off-unverified).

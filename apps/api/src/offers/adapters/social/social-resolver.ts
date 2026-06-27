@@ -58,11 +58,24 @@ export class SocialOfferResolver {
     // the user's free text e.g. "شقة في السالمية") so AR-glued forms like "بالسالمية" still match.
     if (sector === 'realestate') {
       const queryRaw = `${intent.model ?? ''} ${intent.category ?? ''}`.trim();
+      // OWNER BUG fix: a rent query must NOT show sale listings (and vice versa), and an absurd rent
+      // (e.g. 300,000) must never render. The user's rent/buy clarifier answer is AUTHORITATIVE: it
+      // lands in constraints.tenure ('rent'|'buy'). 'buy' === sale tenure. Else the query text decides.
+      const tenureConstraint = intent.constraints?.tenure;
+      const askedTenure =
+        tenureConstraint === 'rent' ? ('rent' as const) : tenureConstraint === 'buy' ? ('sale' as const) : null;
       const filtered = filterFlatsByQuery(
-        out.map((o) => ({ ...o, area: o.sku.attributes.area, text: o.sku.canonicalName })),
+        out.map((o) => ({
+          ...o,
+          area: o.sku.attributes.area,
+          text: `${o.sku.canonicalName} ${o.sku.attributes.permalink ?? ''}`,
+          tenure: o.sku.attributes.tenure,
+          priceFils: o.offer.priceFils,
+        })),
         queryRaw,
+        { tenure: askedTenure },
       );
-      out = filtered.map(({ area: _a, text: _x, ...rest }) => rest as ResolvedOffer);
+      out = filtered.map(({ area: _a, text: _x, tenure: _t, priceFils: _p, ...rest }) => rest as ResolvedOffer);
     }
     return out;
   }

@@ -7,7 +7,12 @@ import {
   ProviderAdapter,
 } from './provider-adapter.interface';
 import { FOOD_TTL_MS, OfferCache } from './offer-cache';
-import { filterDishesByQuery, normalizeFoodText } from './food-relevance';
+import {
+  filterDishesByQuery,
+  isRecognizedFoodToken,
+  isTestRestaurant,
+  normalizeFoodText,
+} from './food-relevance';
 
 /** Per-tier timeout (ADR-003 §4); food rides the http tier but allows a touch more for the menu API. */
 const FOOD_TIER_TIMEOUT_MS: Record<string, number> = {
@@ -63,7 +68,9 @@ export class FoodOfferResolver {
       // Discover a few candidate restaurants. We over-fetch (limit 6) for DISH queries (e.g. "rice")
       // because no single restaurant slug matches the term — we need a wider menu pool to filter the
       // matching dishes out of. For a RESTAURANT query (e.g. "kfc") the slug match is what we want.
-      const refs = await adapter.discover({ text: queryText, limit: 6 }, ctx);
+      const discovered = await adapter.discover({ text: queryText, limit: 6 }, ctx);
+      // Drop test/seed vendors at the source so "Test Burger King" never reaches live results.
+      const refs = discovered.filter((ref) => !isTestRestaurant(ref.handle));
       if (refs.length === 0) return [];
 
       // Was this query a RESTAURANT name (a slug matched the term) or a DISH term (no slug matched)?
@@ -98,15 +105,25 @@ export class FoodOfferResolver {
   }
 
   /**
-   * Did the query name a RESTAURANT (a discovered slug/handle contains a query token) vs a DISH term?
-   * "kfc" → KFC slug matched → restaurant query (whole menu). "rice" → no slug matched → dish query.
+   * Did the query name a RESTAURANT vs a DISH term?
+   * "kfc" → KFC slug matched → restaurant query (whole menu). "rice"/"Chilled with rice" → dish query.
+   *
+   * BUG FIX (2026-06-27, "Chilled with rice" → 274 unrelated items): a slug match must use a token
+   * that is NOT a recognized food/dish term. Otherwise a dish token ("rice"/"chicken") that happens to
+   * appear in SOME discovered slug ("rice-house", "chicken-tikka") flipped the query to restaurant-mode
+   * and DUMPED that restaurant's WHOLE unfiltered menu (sauces/condiments included). A restaurant query
+   * requires a NON-food token to match a slug (e.g. "kfc", "kababji", "hardees" — proper-noun brands).
    */
   private queryMatchedRestaurant(queryText: string, refs: ProductRef[]): boolean {
-    const tokens = normalizeFoodText(queryText).split(' ').filter((t) => t.length >= 2);
+    const tokens = normalizeFoodText(queryText)
+      .split(' ')
+      .filter((t) => t.length >= 2 && !isRecognizedFoodToken(t));
     if (tokens.length === 0) return false;
     return refs.some((ref) => {
       const slug = normalizeFoodText((ref.handle ?? '').replace(/-/g, ' '));
-      return tokens.some((t) => slug.includes(t));
+      // Whole-token slug match (not a loose substring) so "tikka" doesn't match "chicken".
+      const slugTokens = slug.split(' ');
+      return tokens.some((t) => slugTokens.includes(t));
     });
   }
 

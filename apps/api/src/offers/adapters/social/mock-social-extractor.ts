@@ -26,15 +26,39 @@ export class MockSocialExtractor implements SocialExtractor {
         restaurant: post.ownerHandle,
       };
     }
+    const tenure = parseTenure(cap);
     return {
       vertical: 'realestate',
       isOffer: true,
+      tenure,
       area: parseArea(cap),
       rooms: parseRooms(cap),
-      rentFils: priceFils,
+      priceFils,
+      priceUnit: parsePriceUnit(cap, tenure),
+      rentFils: priceFils, // backward-compatible alias
       furnished: parseFurnished(cap),
     };
   }
+}
+
+/**
+ * Tenure (rent vs sale) from the caption. Sale markers (للبيع / تمليك / for sale) win over rent markers
+ * (للإيجار / للايجار / for rent / شهري / monthly). null when the caption states neither.
+ */
+export function parseTenure(caption: string): 'rent' | 'sale' | null {
+  const lc = caption.toLowerCase();
+  if (/للبيع|تمليك|for sale|freehold/i.test(caption) || lc.includes('for sale')) return 'sale';
+  if (/للإيجار|للايجار|for rent|شهري|شهريا|monthly|\/month|per month/i.test(caption) || lc.includes('for rent'))
+    return 'rent';
+  return null;
+}
+
+/** Price unit: 'month' when a monthly marker is present (or tenure=rent), 'total' for sale, else null. */
+export function parsePriceUnit(caption: string, tenure: 'rent' | 'sale' | null): 'month' | 'total' | null {
+  if (/شهري|شهريا|monthly|\/month|per month|للشهر/i.test(caption)) return 'month';
+  if (tenure === 'rent') return 'month';
+  if (tenure === 'sale') return 'total';
+  return null;
 }
 
 /**
@@ -43,11 +67,41 @@ export class MockSocialExtractor implements SocialExtractor {
  * "السعر بالخاص / DM for price / price on request" → no number → null.
  */
 export function parseKwdPrice(caption: string): number | null {
-  const m = caption.match(/(\d+(?:[.,]\d{1,3})?)\s*(?:د\.?\s*ك|kwd|kd|دينار)/i);
+  // Match a number that may carry grouped thousands (300,000 / 300.000 as a SALE price) OR a
+  // decimal KWD amount (12.500 / 420). Disambiguating the two is the whole RE price bug:
+  //   "300,000 د.ك" is THREE-HUNDRED-THOUSAND dinar (a sale), not 300.000 (= 300).
+  const m = caption.match(/(\d[\d.,]*\d|\d)\s*(?:د\.?\s*ك|kwd|kd|دينار)/i);
   if (!m) return null;
-  const kwd = Number(m[1].replace(',', '.'));
-  if (!Number.isFinite(kwd) || kwd <= 0) return null;
+  const kwd = parseKwdNumber(m[1]);
+  if (kwd == null || !Number.isFinite(kwd) || kwd <= 0) return null;
   return Math.round(kwd * 1000);
+}
+
+/**
+ * Interpret a Kuwaiti-dinar number string. KWD uses 3 decimal places (fils). Heuristic:
+ *  - A trailing group of EXACTLY 3 digits after a separator, where another separator/group precedes it
+ *    (e.g. "1,250,000" or "1.250.000"), is GROUPED THOUSANDS → 1250000.
+ *  - A single separator with 1–3 trailing digits ("12.500", "420.5", "75") is a DECIMAL KWD amount.
+ *  - "300,000" (one separator, 3 trailing) is ambiguous but in KWD captions denotes 300,000 dinar (a
+ *    sale) — only fractional fils would use 3 decimals AND such prices are written "300.000" rarely; we
+ *    treat a 3-digit group after a COMMA as thousands, after a DOT as decimal fils (KWD convention).
+ */
+export function parseKwdNumber(s: string): number | null {
+  const seps = (s.match(/[.,]/g) || []).length;
+  if (seps === 0) return Number(s);
+  if (seps >= 2) {
+    // multiple separators → grouped thousands; drop all separators
+    return Number(s.replace(/[.,]/g, ''));
+  }
+  // exactly one separator
+  const sep = s.includes(',') ? ',' : '.';
+  const [intPart, frac = ''] = s.split(sep);
+  if (sep === ',' && frac.length === 3) {
+    // "300,000" → grouped thousands (sale price), 300000
+    return Number(intPart + frac);
+  }
+  // decimal KWD amount: "12.500" → 12.5, "420.5" → 420.5
+  return Number(`${intPart}.${frac}`);
 }
 
 const AREAS: { ar: string; en: string }[] = [

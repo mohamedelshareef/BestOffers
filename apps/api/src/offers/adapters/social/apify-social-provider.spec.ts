@@ -1,4 +1,4 @@
-import { ApifySocialProvider, dedupeByPermalink, mapRow } from './apify-social-provider';
+import { ApifySocialProvider, dedupeByPermalink, mapRow, routeFoodHandles } from './apify-social-provider';
 import { RawPost } from './social-provider';
 
 /**
@@ -208,6 +208,50 @@ describe('ApifySocialProvider — hashtag discovery (opt-in long-tail)', () => {
     await p.fetchPosts({ vertical: 'food', text: 'box' });
     // Handle run consumed the single allowed call; hashtag runs are blocked by the cap.
     expect(runCount).toBe(1);
+  });
+});
+
+describe('routeFoodHandles — category routing (OWNER bug: "Bukhari food" → cakes)', () => {
+  const RICE = ['bukhari_kuwait', 'alamir_bukhari', 'maidaalmandi', 'malekalmajbous'];
+  const DESSERT = ['layers_kw', 'thecakeshop_kuwait', 'js_bakery'];
+
+  it('a RICE query (bukhari) LEADS with rice/home-meal sellers, NOT bakeries', () => {
+    const ordered = routeFoodHandles('Bukhari food');
+    // every rice seller appears before every dessert/bakery seller
+    const firstDessert = Math.min(...DESSERT.map((h) => ordered.indexOf(h)));
+    for (const r of RICE) {
+      expect(ordered.indexOf(r)).toBeGreaterThanOrEqual(0);
+      expect(ordered.indexOf(r)).toBeLessThan(firstDessert);
+    }
+    // @layers_kw (the bakery that wrongly surfaced) must NOT lead a rice query
+    expect(ordered.indexOf('layers_kw')).toBeGreaterThan(ordered.indexOf('bukhari_kuwait'));
+  });
+
+  it('AR machboos (مجبوس) and biryani route to the rice block first', () => {
+    for (const q of ['مجبوس', 'machboos', 'biryani', 'برياني', 'مندي', 'منسف']) {
+      const ordered = routeFoodHandles(q);
+      expect(ordered[0]).toBe('bukhari_kuwait'); // rice block leads
+    }
+  });
+
+  it('a CAKE query leads with dessert sellers (and still includes every seed)', () => {
+    const ordered = routeFoodHandles('cake');
+    expect(ordered[0]).toBe('layers_kw'); // dessert leads for a dessert query
+    // full union still reachable (no seller dropped — only re-ordered)
+    expect(ordered).toContain('bukhari_kuwait');
+    expect(ordered).toContain('basickuwait');
+  });
+
+  it('a grill query leads with grill sellers', () => {
+    const ordered = routeFoodHandles('mashawi');
+    expect(ordered[0]).toBe('mashawi_alzayn');
+  });
+
+  it('always returns the full deduped seed union regardless of query', () => {
+    const a = routeFoodHandles('bukhari');
+    const b = routeFoodHandles('cake');
+    expect(a.length).toBe(b.length); // same set, different order
+    expect(new Set(a).size).toBe(a.length); // deduped
   });
 });
 
